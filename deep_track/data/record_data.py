@@ -10,7 +10,7 @@ DATA_FOLDER = "datasets/first"
 def add_more_data():
     # load a zoo
     z = Zoo()
-    t = Tournament([], z.filler_players, z.ratings, n_players=12, parallel=True)
+    t = Tournament([], z.filler_players, z.ratings, n_repeat_player=12, parallel=True)
     print(t.standings)
 
     # start a tournament
@@ -22,6 +22,7 @@ def add_more_data():
     n_files_already = len(os.listdir(DATA_FOLDER))
 
     print(os.listdir(DATA_FOLDER))
+    print(runs)
 
     runs = [run for run in runs if len(run) > 30]
 

@@ -38,7 +38,7 @@ class GameStateSeqToTensor(object):
 #         return self.__class__.__name__ + '()'
 
 
-class PommeGamesDataset(Dataset):
+class GamesDataFiles(Dataset):
     def __init__(self, root_dir, sequence_len=10, subtract_mean=False, p=1.0):
         self.root_dir = root_dir
         self.file_list = os.listdir(self.root_dir)
@@ -106,7 +106,7 @@ class PommeGamesDataset(Dataset):
         # return masked_ep
 
 if __name__ == "__main__":
-    data = PommeGamesDataset(DATA_FOLDER)
+    data = GamesDataFiles(DATA_FOLDER)
     data_loader = DataLoader(data, batch_size=4, shuffle=True, num_workers=1)
 
     for i, batch in zip(range(3), data_loader):

@@ -1,1 +1,1 @@
-from .data_container import PommeGamesDataset
+from .data_container import GamesDataFiles
