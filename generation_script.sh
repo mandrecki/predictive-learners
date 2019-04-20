@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-SEED_OFFSET=200
-#ENV_NAMES=( "CarRacing-v0" "Snake-ple-v0" "Tetris-v0" "PuckWorld-ple-v0" "WaterWorld-ple-v0" "PixelCopter-ple-v0" "CubeCrash-v0" "Catcher-ple-v0" "Pong-ple-v0" )
-ENV_NAMES=( "CarRacing-v0" )
+#SEED_OFFSET=200
+ENV_NAMES=( "CarRacing-v0" "Snake-ple-v0" "Tetris-v0" "PuckWorld-ple-v0" "WaterWorld-ple-v0" "PixelCopter-ple-v0" "CubeCrash-v0" "Catcher-ple-v0" "Pong-ple-v0" )
+#ENV_NAMES=( "CarRacing-v0" )
 RUNS=0
 
 for ((i=0;i<${#ENV_NAMES[@]};++i));
