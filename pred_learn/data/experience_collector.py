@@ -9,7 +9,7 @@ from skimage.transform import resize
 import os
 import argparse
 
-from pred_learn.data.env_configs import EXTRA_ARGS
+from pred_learn.envs.env_configs import ENV_ARGS
 from pred_learn.utils import states2video
 
 if __name__ == "__main__":
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     except FileExistsError:
         pass
 
-    extra_args = EXTRA_ARGS.get(args.env_id, {})
+    extra_args = ENV_ARGS.get(args.env_id, {})
     env = gym_ple.make(args.env_id, **extra_args)
     env.render = False
 

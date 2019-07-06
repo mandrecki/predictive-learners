@@ -1,4 +1,4 @@
-ENVS = [
+ENV_GAMES = [
     "CarRacing-v0",
     "Snake-ple-v0",
     "Tetris-v0",
@@ -10,11 +10,19 @@ ENVS = [
     "Pong-ple-v0",
 ]
 
+ENV_CLASSICS = [
+    "CartPole-v0"
+]
+
+ENV_MUJOCOS = []
+
+ALL_ENVS = ENV_GAMES + ENV_CLASSICS + ENV_MUJOCOS
+
 EXTRA_SMALL = 64
 SMALL = 64
 MEDIUM = 64
 
-EXTRA_ARGS = {
+ENV_ARGS = {
     "Snake-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL, "init_length": 10},
     "PuckWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
     "WaterWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
