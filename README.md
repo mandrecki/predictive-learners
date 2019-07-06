@@ -12,11 +12,16 @@ Not available right now.
 
 ### Requirements
 
-* Pytorch
+* pytorch
 * numpy
+* plotly
+* pyvirtualdisplay
+
+Environments
 * gym
 * gym_ple
 * gym_tetris
+* mujoco
 
 ## Environments available
 
@@ -29,6 +34,7 @@ Not available right now.
 * CubeCrash-v0
 * Catcher-ple-v0
 * Pong-ple-v0
+* more...
 
 
 ## Running experiments
