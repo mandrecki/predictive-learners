@@ -19,7 +19,7 @@ EXTRA_ARGS = {
     "PuckWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
     "WaterWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
     "PixelCopter-ple-v0": {"width": SMALL, "height": SMALL},
-    "CubeCrash-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
+    # "CubeCrash-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
     "Catcher-ple-v0": {"width": SMALL, "height": SMALL},
     "Pong-ple-v0": {"width": SMALL, "height": SMALL},
 }
