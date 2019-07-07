@@ -66,7 +66,6 @@ class UnSuite(gym.ObservationWrapper):
     def observation(self, state):
         return self._env.physics.render(camera_id=0)
 
-# TODO
 # Perturbing environments
 
 # AddShuffledDims
