@@ -43,7 +43,9 @@ class ResizeImage(gym.ObservationWrapper):
                                                 dtype=np.uint8)
 
     def observation(self, image):
-        image = cv2.resize(image, self.new_size, interpolation=cv2.INTER_LINEAR)
+        # interpolation = cv2.INTER_LINEAR
+        interpolation = cv2.INTER_AREA
+        image = cv2.resize(image, self.new_size, interpolation=interpolation)
         return image
 
 

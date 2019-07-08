@@ -34,7 +34,7 @@ import numpy as np
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite
 
 GAME_ENVS = [
-    # "CarRacing-v0",
+    "CarRacing-v0",
     "TetrisA-v2",  # v2: reward score, penalize height
     "Snake-ple-v0",
     "PuckWorld-ple-v0",
@@ -47,6 +47,7 @@ GAME_ENVS = [
 
 GAME_ENVS_ACTION_REPEATS = {
     "TetrisA-v2" : 8,
+    "CarRacing-v0": 4,
 }
 
 
