@@ -47,6 +47,7 @@ class Predictor(nn.Module):
     """
     def __init__(self, **models):
         super(Predictor, self).__init__()
+        self.stateful = False
 
         self.transition_is_determininstic = None
         self.observation_is_determininstic = None
@@ -59,15 +60,49 @@ class Predictor(nn.Module):
 
         self.image_encoder = models.get("image_encoder", None)
         self.action_encoder = models.get("action_encoder", None)
-        self.decoder = models.get("decoder", None)
-        self.state_propagator = models.get("state_propagator", None)
+        self.image_decoder = models.get("image_decoder", None)
+        self.reward_decoder = models.get("reward_decoder", None)
+        self.measurement_updater = models.get("measurement_updater", None)
+        self.action_propagator = models.get("action_propagator", None)
+        self.env_propagator = models.get("env_propagator", None)
+
+    def generate_predictions(self, o_series, a_series, r_series):
+        belief = None
+        o_recons = []
+        o_predictions = []
+        for t in range(o_series.size(1)):
+            o_now = o_series[:, t, ...]
+            a_now = a_series[:, t, ...]
+            # r_t = r_series[:, t, ...]
+
+            o_now_enc = self.image_encoder(o_now).unsqueeze(1)
+            # TODO add masking of o_t_enc (skip for initial ts)
+            belief = self.measurement_updater(o_now_enc, belief)
+            print(belief.size())
+
+            o_recon = self.image_decoder(belief)
+            o_recons.append(o_recon.unsqueeze(1))
+
+            a_t_enc = self.action_encoder(a_now)
+            belief = self.action_propagator(a_t_enc, belief)
+            # TODO add masking of null actions
+            belief = self.env_propagator(belief)
+            o_prediction = self.image_decoder(belief)
+            o_predictions.append(o_prediction.unsqueeze(1))
+
+        o_recons = torch.cat(o_recons, dim=1)
+        o_predictions = torch.cat(o_predictions, dim=1)
+        return o_recons, o_predictions
+
+    def forward(self, *tensors):
+        raise NotImplemented
 
 
 class AE_Predictor(Predictor):
     def __init__(self, **models):
         super(AE_Predictor, self).__init__()
 
-        from pred_learn.models.ae import Encoder, Decoder, BeliefStatePropagator
+        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator
 
         self.transition_is_determininstic = True
         self.observation_is_determininstic = True
@@ -79,9 +114,13 @@ class AE_Predictor(Predictor):
         self.regularisation_loss = None
 
         self.image_encoder = models.get("image_encoder", Encoder())
-        # self.action_encoder = models.get("action_encoder", None)
-        self.decoder = models.get("decoder", Decoder())
-        self.state_propagator = models.get("state_propagator", BeliefStatePropagator())
+        self.action_encoder = models.get("action_encoder", ActionEncoder)
+        self.image_decoder = models.get("image_decoder", Decoder())
+
+        self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
+        self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
+
+        self.env_propagator = models.get("state_propagator", BeliefStatePropagator())
 
     def forward(self, *tensors):
         assert 0 < len(tensors) <= 2
@@ -96,7 +135,7 @@ class AE_Predictor(Predictor):
         for step in range(xs.size(1)):
             x = xs[:, step, ...]
             z = self.image_encoder(x)
-            next_z, h = self.state_propagator(z.unsqueeze(0), h)
+            next_z, h = self.env_propagator(z.unsqueeze(0), h)
             next_x = self.decoder(next_z.squeeze(0))
             out_im.append(next_x.unsqueeze(1))
 

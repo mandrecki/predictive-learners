@@ -68,9 +68,9 @@ class ObservationSeriesDataset(Dataset):
             timestep = self.record[i]
             sample["s0"].append(torch.FloatTensor(timestep["s0"]/255).permute([2, 1, 0]).unsqueeze(0))
             sample["s1"].append(torch.FloatTensor(timestep["s1"]/255).permute([2, 1, 0]).unsqueeze(0))
-            sample["a0"].append(torch.LongTensor([timestep["a0"]].unsqueeze(0)))
-            sample["r1"].append(torch.FloatTensor([timestep["r1"]].unsqueeze(0)))
-            sample["terminal"].append(torch.ByteTensor([timestep["terminal"]].unsqueeze(0)))
+            sample["a0"].append(torch.LongTensor([timestep["a0"]]).unsqueeze(0))
+            sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
+            sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]).unsqueeze(0))
 
         for key, value in sample.items():
             sample[key] = torch.cat(value)

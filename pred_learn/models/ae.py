@@ -1,7 +1,7 @@
 """
 Predictive autoencoder: deterministic RNN for tansitions combined with convolutional encoding and decoding.
 """
-
+import torch
 from torch import nn
 
 
@@ -72,15 +72,33 @@ class Decoder(nn.Module):
         return out
 
 
+class ActionEncoder(nn.Module):
+    def __init__(self, action_dim, v_size=V_SIZE):
+        super(ActionEncoder, self).__init__()
+        self.action_dim = action_dim
+        self.fc_seq = nn.Sequential(
+            nn.Linear(self.action_dim, v_size),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, actions):
+        batch_size = actions.size(0)
+        a_onehot = torch.zeros((batch_size, self.action_dim))
+        a_onehot[range(batch_size), actions.view(-1)] = 1
+        out = self.fc_seq(a_onehot)
+        return out
+
+
 class BeliefStatePropagator(nn.Module):
     def __init__(self, v_size=V_SIZE, bs_size=BS_SIZE):
         super(BeliefStatePropagator, self).__init__()
         self.gru = nn.GRU(v_size, bs_size, num_layers=1, batch_first=True)
 
     def forward(self, x, h=None):
-        if h is None:
-            out, h = self.gru(x)
-        else:
-            out, h = self.gru(x, h)
+        # if h is None:
+        #     out = self.gru(x)
+        # else:
+        #     out = self.gru(x, h)
 
-        return out, h
+        out, h = self.gru(x, h)
+        return out
