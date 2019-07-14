@@ -46,10 +46,21 @@ class ObservationDataset(Dataset):
 
 
 class ObservationSeriesDataset(Dataset):
-    def __init__(self, filepath, action_space_n, series_length):
+    def __init__(self, filepath, action_space_n, series_length, subtract_average=False):
         self.record = torch.load(filepath)
         self.action_space_n = action_space_n
         self.series_length = series_length
+
+        self.subtract_average = subtract_average
+        self.average_im = None
+        if self.subtract_average:
+            self.calculate_average_image()
+
+    def calculate_average_image(self):
+        sum_im = np.zeros((64, 64, 3))
+        for timestep in self.record:
+            sum_im += timestep["s0"]
+        self.average_im = sum_im/len(self.record)/255
 
     def __len__(self):
         return len(self.record)
@@ -66,8 +77,14 @@ class ObservationSeriesDataset(Dataset):
         }
         for i in range(idx, idx+self.series_length):
             timestep = self.record[i]
-            sample["s0"].append(torch.FloatTensor(timestep["s0"]/255).permute([2, 1, 0]).unsqueeze(0))
-            sample["s1"].append(torch.FloatTensor(timestep["s1"]/255).permute([2, 1, 0]).unsqueeze(0))
+            s0 = timestep["s0"]/255
+            s1 = timestep["s1"]/255
+            if self.subtract_average:
+                s0 -= self.average_im
+                s1 -= self.average_im
+
+            sample["s0"].append(torch.FloatTensor(s0).permute([2, 1, 0]).unsqueeze(0))
+            sample["s1"].append(torch.FloatTensor(s1).permute([2, 1, 0]).unsqueeze(0))
             sample["a0"].append(torch.LongTensor([timestep["a0"]]).unsqueeze(0))
             sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
             sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]).unsqueeze(0))

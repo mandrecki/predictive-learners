@@ -39,6 +39,7 @@ Requirements:
 
 import torch
 from torch import nn
+import numpy as np
 
 
 class Predictor(nn.Module):
@@ -66,40 +67,12 @@ class Predictor(nn.Module):
         self.action_propagator = models.get("action_propagator", None)
         self.env_propagator = models.get("env_propagator", None)
 
-    def generate_predictions(self, o_series, a_series, r_series):
-        belief = None
-        o_recons = []
-        o_predictions = []
-        for t in range(o_series.size(1)):
-            o_now = o_series[:, t, ...]
-            a_now = a_series[:, t, ...]
-            # r_t = r_series[:, t, ...]
-
-            o_now_enc = self.image_encoder(o_now).unsqueeze(1)
-            # TODO add masking of o_t_enc (skip for initial ts)
-            belief = self.measurement_updater(o_now_enc, belief)
-            print(belief.size())
-
-            o_recon = self.image_decoder(belief)
-            o_recons.append(o_recon.unsqueeze(1))
-
-            a_t_enc = self.action_encoder(a_now)
-            belief = self.action_propagator(a_t_enc, belief)
-            # TODO add masking of null actions
-            belief = self.env_propagator(belief)
-            o_prediction = self.image_decoder(belief)
-            o_predictions.append(o_prediction.unsqueeze(1))
-
-        o_recons = torch.cat(o_recons, dim=1)
-        o_predictions = torch.cat(o_predictions, dim=1)
-        return o_recons, o_predictions
-
     def forward(self, *tensors):
         raise NotImplemented
 
 
 class AE_Predictor(Predictor):
-    def __init__(self, **models):
+    def __init__(self, action_dim, models={}):
         super(AE_Predictor, self).__init__()
 
         from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator
@@ -108,19 +81,65 @@ class AE_Predictor(Predictor):
         self.observation_is_determininstic = True
         self.reward_is_determininstic = True
 
+        self.skip_update_p = 0.5
+        self.skip_null_action = True
+
         # mse or likelihood
         self.recon_loss = None
         # VAE or beta-VAE or other
         self.regularisation_loss = None
 
         self.image_encoder = models.get("image_encoder", Encoder())
-        self.action_encoder = models.get("action_encoder", ActionEncoder)
+        self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
         self.image_decoder = models.get("image_decoder", Decoder())
 
         self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
         self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
 
         self.env_propagator = models.get("state_propagator", BeliefStatePropagator())
+
+    def generate_predictions(self, o_series, a_series):
+        batch_size = o_series.size(0)
+        series_len = o_series.size(1)
+        belief = None
+        o_recons = []
+        o_predictions = []
+        for t in range(series_len):
+            o_0 = o_series[:, t, ...]
+            a_0 = a_series[:, t, ...]
+            # r_t = r_series[:, t, ...]
+
+            o_0_enc = self.image_encoder(o_0).unsqueeze(1)
+            # TODO add masking of o_t_enc (skip for initial ts)
+            if t < 2:
+                out, belief = self.measurement_updater(o_0_enc, belief)
+            else:
+                out, updated_belief = self.measurement_updater(o_0_enc, belief)
+
+                mask = torch.ones(updated_belief.size(), device=o_0.device)
+                skip = torch.ByteTensor(np.random.rand(batch_size) < self.skip_update_p).cuda()
+                mask[:, skip, ...] = 0
+                belief = mask * updated_belief + (1 - mask) * belief
+
+            o_recon = self.image_decoder(out)
+            o_recons.append(o_recon.unsqueeze(1))
+
+            a_0_enc = self.action_encoder(a_0).unsqueeze(1)
+            out, updated_belief = self.action_propagator(a_0_enc, belief)
+            # TODO add masking of null actions
+            if self.skip_null_action:
+                mask = torch.ones(updated_belief.size(), device=o_0.device)
+                skip = (a_0 == 0).view(-1).cuda().byte()
+                mask[:, skip, ...] = 0
+                belief = mask * updated_belief + (1 - mask) * belief
+
+            out, belief = self.env_propagator(out, belief)
+            o_prediction = self.image_decoder(out)
+            o_predictions.append(o_prediction.unsqueeze(1))
+
+        o_recons = torch.cat(o_recons, dim=1)
+        o_predictions = torch.cat(o_predictions, dim=1)
+        return o_recons, o_predictions
 
     def forward(self, *tensors):
         assert 0 < len(tensors) <= 2

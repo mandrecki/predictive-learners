@@ -68,7 +68,9 @@ GYM_ENVS = ['Pendulum-v0', 'MountainCarContinuous-v0', 'Ant-v2', 'HalfCheetah-v2
             'HumanoidStandup-v2', 'InvertedDoublePendulum-v2', 'InvertedPendulum-v2', 'Reacher-v2', 'Swimmer-v2',
             'Walker2d-v2']
 
-GYM_ENVS_ACTION_REPEATS = {}
+GYM_ENVS_ACTION_REPEATS = {
+    "CarRacing-v0": 6,
+}
 
 CONTROL_SUITE_ENVS = ['cartpole-balance', 'cartpole-swingup', 'reacher-easy', 'finger-spin', 'cheetah-run',
                       'ball_in_cup-catch', 'walker-walk']
@@ -81,13 +83,15 @@ CROP_ENVS = {
 }
 
 
-def make_env(env_id, seed):
+def make_env(env_id, seed, max_episode_length):
     if env_id in GAME_ENVS:
-        env = GameEnv(env_id, seed, max_episode_length=50)
+        env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
-        env = GymEnv(env_id, seed, max_episode_length=50)
+        env = GymEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in CONTROL_SUITE_ENVS:
-        env = ControlSuiteEnv(env_id, seed, max_episode_length=50)
+        env = ControlSuiteEnv(env_id, seed, max_episode_length=max_episode_length)
+    else:
+        raise ValueError("Bad env_id", env_id)
 
     # Crop and resize if necessary
     if env_id in CROP_ENVS.keys():
@@ -156,6 +160,15 @@ class GameEnv:
     # Sample an action randomly from a uniform distribution over all valid actions
     def sample_random_action(self):
         return self._env.action_space.sample()
+
+    # TODO Add this and wrap full env?
+    # @property
+    # def action_space(self):
+    #     return self._env.action_space
+    #
+    # @property
+    # def observation_space(self):
+    #     return self._env.observation_space
 
 
 class GymEnv:
@@ -294,14 +307,13 @@ class EnvBatcher():
     def reset(self):
         observations = [env.reset() for env in self.envs]
         self.dones = [False] * self.n
-        return torch.cat(observations)
+        return np.concatenate(np.expand_dims(observations, 0))
 
     # Steps/resets every environment and returns (observation, reward, done); returns blank observation once done
     def step(self, actions):
         observations, rewards, dones = zip(*[env.step(action) for env, action in zip(self.envs, actions)])
         self.dones = dones
-        return torch.cat(observations), torch.tensor(rewards, dtype=torch.float32), torch.tensor(dones,
-                                                                                                 dtype=torch.uint8)
+        return np.concatenate(np.expand_dims(observations, 0)), np.array(rewards), np.array(dones, dtype=np.uint8)
 
     def close(self):
         [env.close() for env in self.envs]
