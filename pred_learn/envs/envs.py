@@ -31,7 +31,8 @@ Questions:
 
 import cv2
 import numpy as np
-from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite
+from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
+from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -53,14 +54,15 @@ GAME_ENVS_ACTION_REPEATS = {
 
 EXTRA_SMALL = 64
 SMALL = 64
-MEDIUM = 64
+PRED_SIZE = 64
+RL_SIZE = 84
 ENV_GAMES_ARGS = {
-    "Snake-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL, "init_length": 10},
-    "PuckWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
-    "WaterWorld-ple-v0": {"width": EXTRA_SMALL, "height": EXTRA_SMALL},
-    "PixelCopter-ple-v0": {"width": SMALL, "height": SMALL},
-    "Catcher-ple-v0": {"width": SMALL, "height": SMALL},
-    "Pong-ple-v0": {"width": SMALL, "height": SMALL},
+    "Snake-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE, "init_length": 10},
+    "PuckWorld-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
+    "WaterWorld-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
+    "PixelCopter-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
+    "Catcher-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
+    "Pong-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
 }
 
 
@@ -83,7 +85,7 @@ CROP_ENVS = {
 }
 
 
-def make_env(env_id, seed, max_episode_length):
+def make_env(env_id, seed, max_episode_length=1000, pytorch_dim_order=False, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
@@ -96,14 +98,42 @@ def make_env(env_id, seed, max_episode_length):
     # Crop and resize if necessary
     if env_id in CROP_ENVS.keys():
         env._env = CropImage(env._env, CROP_ENVS.get(env_id))
-    if env.observation_size[0:2] != (64, 64):
-        env._env = ResizeImage(env._env, (64, 64))
+    if env.observation_size[0:2] != target_size:
+        env._env = ResizeImage(env._env, target_size)
+
+    if pytorch_dim_order:
+        env._env = TransposeImage(env._env)
 
     return env
 
 
+def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
+    def _thunk():
+        return make_env(env_id, seed=seed, pytorch_dim_order=True, target_size=target_size, **kwargs)
+
+    return _thunk
+
+
+def make_pyvec_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
+    envs = [env_generator(env_id, seed=seed+i) for i in range(n_envs)]
+
+    if len(envs) > 1:
+        envs = SubprocVecEnv(envs)
+    else:
+        envs = DummyVecEnv(envs)
+
+    envs = VecPyTorch(envs, device)
+
+    if num_frame_stack is not None:
+        envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+    elif len(envs.observation_space.shape) == 3:
+        envs = VecPyTorchFrameStack(envs, 4, device)
+
+    return envs
+
+
 class GameEnv:
-    def __init__(self, env_id, seed, max_episode_length=200):
+    def __init__(self, env_id, seed, max_episode_length=1000):
         import gym
         extra_args = ENV_GAMES_ARGS.get(env_id, {})
         if env_id == "TetrisA-v2":
@@ -132,7 +162,7 @@ class GameEnv:
         # action = action.detach().numpy()
         reward = 0
         for k in range(self.action_repeat):
-            observation, reward_k, done, _ = self._env.step(action)
+            observation, reward_k, done, info = self._env.step(action)
             # image = self._env.render(mode='rgb_array')
             # observation = cv2.resize(image, (64, 64), interpolation=cv2.INTER_LINEAR)
             reward += reward_k
@@ -141,7 +171,7 @@ class GameEnv:
             if done:
                 break
 
-        return observation, reward, done, None
+        return observation, reward, done, info
 
     def render(self):
         self._env.render()
@@ -162,17 +192,21 @@ class GameEnv:
         return self._env.action_space.sample()
 
     # TODO Add this and wrap full env?
-    # @property
-    # def action_space(self):
-    #     return self._env.action_space
+    @property
+    def action_space(self):
+        return self._env.action_space
     #
-    # @property
-    # def observation_space(self):
-    #     return self._env.observation_space
+    @property
+    def observation_space(self):
+        return self._env.observation_space
+
+    @property
+    def spec(self):
+        return self._env.spec
 
 
 class GymEnv:
-    def __init__(self, env_id, seed, max_episode_length=200):
+    def __init__(self, env_id, seed, max_episode_length=1000):
         import gym
         self._env = ToImageObservation(gym.make(env_id))
         self._env.seed(seed)
@@ -188,13 +222,13 @@ class GymEnv:
     def step(self, action):
         reward = 0
         for k in range(self.action_repeat):
-            observation, reward_k, done, _ = self._env.step(action)
+            observation, reward_k, done, info = self._env.step(action)
             reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
                 break
-        return observation, reward, done, None
+        return observation, reward, done, info
 
     def render(self):
         self._env.render()
@@ -214,9 +248,21 @@ class GymEnv:
     def sample_random_action(self):
         return self._env.action_space.sample()
 
+    @property
+    def action_space(self):
+        return self._env.action_space
+    #
+    @property
+    def observation_space(self):
+        return self._env.observation_space
+
+    @property
+    def spec(self):
+        return self._env.spec
+
 
 class ControlSuiteEnv:
-    def __init__(self, env_id, seed, max_episode_length=200):
+    def __init__(self, env_id, seed, max_episode_length=1000):
         from dm_control import suite
         from dm_control.suite.wrappers import pixels
         domain, task = env_id.split('-')
@@ -243,13 +289,13 @@ class ControlSuiteEnv:
     def step(self, action):
         reward = 0
         for k in range(self.action_repeat):
-            observation, reward_k, done, _ = self._env.step(action)
+            observation, reward_k, done, info = self._env.step(action)
             reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
                 break
-        return observation, reward, done, None
+        return observation, reward, done, info
 
     def render(self):
         cv2.imshow('screen', self._env.physics.render(camera_id=0)[:, :, ::-1])
@@ -271,6 +317,18 @@ class ControlSuiteEnv:
     def sample_random_action(self):
         spec = self._env.action_spec()
         return np.random.uniform(spec.minimum, spec.maximum, spec.shape)
+
+    @property
+    def action_space(self):
+        return self._env.action_space
+    #
+    @property
+    def observation_space(self):
+        return self._env.observation_space
+
+    @property
+    def spec(self):
+        return self._env.spec
 
 
 # TODO update below

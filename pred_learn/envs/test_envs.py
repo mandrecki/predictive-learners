@@ -9,13 +9,14 @@ if __name__ == "__main__":
 
     record = []
     seed = 0
-    for env_id in ALL_ENVS:
+    run_length = 25
+    # for env_id in ALL_ENVS:
     # for env_id in GYM_ENVS:
     # for env_id in GAME_ENVS:
-    # for env_id in CONTROL_SUITE_ENVS:
+    for env_id in CONTROL_SUITE_ENVS:
         env = make_env(env_id, 0)
         obs = env.reset()
-        for i in range(1000):
+        for i in range(run_length):
             timestep = {}
             timestep["s0"] = np.copy(obs)
             action = env.sample_random_action()
