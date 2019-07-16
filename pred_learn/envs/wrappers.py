@@ -7,7 +7,6 @@ from baselines.common.vec_env import VecEnvWrapper
 
 
 # Standardising environments
-
 class ToImageObservation(gym.ObservationWrapper):
     def __init__(self, env):
         super(ToImageObservation, self).__init__(env)
@@ -67,7 +66,7 @@ class UnSuite(gym.ObservationWrapper):
         # observation = state.observation["pixels"]
         reward = state.reward
         done = state.last()
-        return self._env.physics.render(camera_id=0), reward, done, None
+        return self._env.physics.render(camera_id=0), reward, done, {}
 
     def observation(self, state):
         return self._env.physics.render(camera_id=0)

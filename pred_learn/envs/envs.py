@@ -33,6 +33,7 @@ import cv2
 import numpy as np
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
+from baselines import bench
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -52,10 +53,10 @@ GAME_ENVS_ACTION_REPEATS = {
 }
 
 
-EXTRA_SMALL = 64
-SMALL = 64
+# EXTRA_SMALL = 64
+# SMALL = 64
 PRED_SIZE = 64
-RL_SIZE = 84
+RL_SIZE = 64
 ENV_GAMES_ARGS = {
     "Snake-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE, "init_length": 10},
     "PuckWorld-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
@@ -85,7 +86,7 @@ CROP_ENVS = {
 }
 
 
-def make_env(env_id, seed, max_episode_length=1000, pytorch_dim_order=False, target_size=(PRED_SIZE, PRED_SIZE)):
+def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
@@ -104,6 +105,8 @@ def make_env(env_id, seed, max_episode_length=1000, pytorch_dim_order=False, tar
     if pytorch_dim_order:
         env._env = TransposeImage(env._env)
 
+    env._env = bench.Monitor(env._env, filename=None, allow_early_resets=True)
+
     return env
 
 
@@ -114,7 +117,7 @@ def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
     return _thunk
 
 
-def make_pyvec_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
+def make_rl_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
     envs = [env_generator(env_id, seed=seed+i) for i in range(n_envs)]
 
     if len(envs) > 1:
@@ -132,9 +135,41 @@ def make_pyvec_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs
     return envs
 
 
-class GameEnv:
+class AbstractEnv:
+    metadata = {'render.modes': []}
+    reward_range = (-float('inf'), float('inf'))
+    spec = None
+    def __init__(self):
+        pass
+
+    @property
+    def observation_size(self):
+        return self._env.observation_space.shape
+
+    @property
+    def action_size(self):
+        return self._env.action_space.shape[0]
+
+    @property
+    def action_space(self):
+        return self._env.action_space
+    #
+    @property
+    def observation_space(self):
+        return self._env.observation_space
+
+    @property
+    def spec(self):
+        return self._env.spec
+
+    @property
+    def reward_range(self):
+        return self._env.reward_range
+
+
+class GameEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
-        import gym
+        super(GameEnv, self).__init__()
         extra_args = ENV_GAMES_ARGS.get(env_id, {})
         if env_id == "TetrisA-v2":
             import gym_tetris
@@ -146,6 +181,7 @@ class GameEnv:
             import gym_ple
             self._env = gym_ple.make(env_id, **extra_args)
         else:
+            import gym
             self._env = gym.make(env_id, **extra_args)
 
         self._env.seed(seed)
@@ -179,34 +215,14 @@ class GameEnv:
     def close(self):
         self._env.close()
 
-    @property
-    def observation_size(self):
-        return self._env.observation_space.shape
-
-    @property
-    def action_size(self):
-        return self._env.action_space.shape[0]
-
     # Sample an action randomly from a uniform distribution over all valid actions
     def sample_random_action(self):
         return self._env.action_space.sample()
 
-    # TODO Add this and wrap full env?
-    @property
-    def action_space(self):
-        return self._env.action_space
-    #
-    @property
-    def observation_space(self):
-        return self._env.observation_space
 
-    @property
-    def spec(self):
-        return self._env.spec
-
-
-class GymEnv:
+class GymEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
+        super(GymEnv, self).__init__()
         import gym
         self._env = ToImageObservation(gym.make(env_id))
         self._env.seed(seed)
@@ -236,33 +252,14 @@ class GymEnv:
     def close(self):
         self._env.close()
 
-    @property
-    def observation_size(self):
-        return self._env.observation_space.shape
-
-    @property
-    def action_size(self):
-        return self._env.action_space.shape[0]
-
     # Sample an action randomly from a uniform distribution over all valid actions
     def sample_random_action(self):
         return self._env.action_space.sample()
 
-    @property
-    def action_space(self):
-        return self._env.action_space
-    #
-    @property
-    def observation_space(self):
-        return self._env.observation_space
 
-    @property
-    def spec(self):
-        return self._env.spec
-
-
-class ControlSuiteEnv:
+class ControlSuiteEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
+        super(ControlSuiteEnv, self).__init__()
         from dm_control import suite
         from dm_control.suite.wrappers import pixels
         domain, task = env_id.split('-')
@@ -270,8 +267,6 @@ class ControlSuiteEnv:
         self._env = pixels.Wrapper(self._env)
         self._env.action_space = self.action_size
         self._env.observation_space = self.observation_size
-        self._env.reward_range = None
-        self._env.metadata = None
         self._env = UnSuite(self._env)
 
         self.action_repeat = CONTROL_SUITE_ACTION_REPEATS.get(domain, 1)
@@ -317,18 +312,6 @@ class ControlSuiteEnv:
     def sample_random_action(self):
         spec = self._env.action_spec()
         return np.random.uniform(spec.minimum, spec.maximum, spec.shape)
-
-    @property
-    def action_space(self):
-        return self._env.action_space
-    #
-    @property
-    def observation_space(self):
-        return self._env.observation_space
-
-    @property
-    def spec(self):
-        return self._env.spec
 
 
 # TODO update below
