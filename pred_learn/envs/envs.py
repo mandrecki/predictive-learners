@@ -67,9 +67,10 @@ ENV_GAMES_ARGS = {
 }
 
 
-GYM_ENVS = ['Pendulum-v0', 'MountainCarContinuous-v0', 'Ant-v2', 'HalfCheetah-v2', 'Hopper-v2', 'Humanoid-v2',
-            'HumanoidStandup-v2', 'InvertedDoublePendulum-v2', 'InvertedPendulum-v2', 'Reacher-v2', 'Swimmer-v2',
-            'Walker2d-v2']
+GYM_ENVS = [ "CartPole-v0",
+    'Pendulum-v0', 'MountainCar-v0', 'Ant-v2', 'HalfCheetah-v2', 'Hopper-v2', 'Humanoid-v2',
+    'HumanoidStandup-v2', 'InvertedDoublePendulum-v2', 'InvertedPendulum-v2', 'Reacher-v2', 'Swimmer-v2',
+    'Walker2d-v2']
 
 GYM_ENVS_ACTION_REPEATS = {
     "CarRacing-v0": 6,
@@ -105,7 +106,7 @@ def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, t
     if pytorch_dim_order:
         env._env = TransposeImage(env._env)
 
-    env._env = bench.Monitor(env._env, filename=None, allow_early_resets=True)
+    # env._env = bench.Monitor(env._env, filename=None, allow_early_resets=True)
 
     return env
 

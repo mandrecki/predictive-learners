@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
-from pyvirtualdisplay import Display
 
 from pred_learn.envs import *
 
 if __name__ == "__main__":
+    from pyvirtualdisplay import Display
     display = Display(visible=1, size=(600, 500))
     display.start()
 
