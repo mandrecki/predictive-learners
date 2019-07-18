@@ -33,7 +33,6 @@ import cv2
 import numpy as np
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
-from baselines import bench
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -57,6 +56,7 @@ GAME_ENVS_ACTION_REPEATS = {
 # SMALL = 64
 PRED_SIZE = 64
 RL_SIZE = 64
+CHANNELS = 3
 ENV_GAMES_ARGS = {
     "Snake-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE, "init_length": 10},
     "PuckWorld-ple-v0": {"width": PRED_SIZE, "height": PRED_SIZE},
@@ -85,6 +85,21 @@ ALL_ENVS = GAME_ENVS + GYM_ENVS + CONTROL_SUITE_ENVS
 CROP_ENVS = {
     "TetrisA-v2": (45, 211, 93, 178),  # only blocks visible
 }
+
+
+# For list of gym envs see https://github.com/openai/gym/wiki/Table-of-environments
+# only discrete
+CURRENT_ENVS = [
+    # games
+    "PixelCopter-ple-v0",
+    "CarRacing-v0",
+    "Pong-ple-v0",
+    "TetrisA-v2",
+
+    # classics
+    "CartPole-v0",
+    'MountainCar-v0',
+]
 
 
 def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, target_size=(PRED_SIZE, PRED_SIZE)):
@@ -119,7 +134,7 @@ def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
 
 
 def make_rl_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
-    envs = [env_generator(env_id, seed=seed+i) for i in range(n_envs)]
+    envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
 
     if len(envs) > 1:
         envs = SubprocVecEnv(envs)
@@ -141,6 +156,7 @@ class AbstractEnv:
     reward_range = (-float('inf'), float('inf'))
     spec = None
     def __init__(self):
+        self.ep_reward = 0
         pass
 
     @property
@@ -192,6 +208,7 @@ class GameEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
+        self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -203,14 +220,16 @@ class GameEnv(AbstractEnv):
             # image = self._env.render(mode='rgb_array')
             # observation = cv2.resize(image, (64, 64), interpolation=cv2.INTER_LINEAR)
             reward += reward_k
+            self.ep_reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
+                info.update({'episode': {'r': self.ep_reward}})
                 break
 
         return observation, reward, done, info
 
-    def render(self):
+    def render(self, mode='human'):
         self._env.render()
 
     def close(self):
@@ -233,6 +252,7 @@ class GymEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
+        self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -241,9 +261,11 @@ class GymEnv(AbstractEnv):
         for k in range(self.action_repeat):
             observation, reward_k, done, info = self._env.step(action)
             reward += reward_k
+            self.ep_reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
+                info.update({'episode': {'r': self.ep_reward}})
                 break
         return observation, reward, done, info
 
@@ -279,6 +301,7 @@ class ControlSuiteEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
+        self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -287,9 +310,11 @@ class ControlSuiteEnv(AbstractEnv):
         for k in range(self.action_repeat):
             observation, reward_k, done, info = self._env.step(action)
             reward += reward_k
+            self.ep_reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
+                info.update({'episode': {'r': self.ep_reward}})
                 break
         return observation, reward, done, info
 
