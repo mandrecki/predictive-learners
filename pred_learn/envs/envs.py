@@ -38,8 +38,7 @@ from gym_tetris.actions import SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 import gym_ple
 
-from dm_control import suite
-from dm_control.suite.wrappers import pixels
+
 
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
@@ -288,6 +287,8 @@ class ControlSuiteEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
         super(ControlSuiteEnv, self).__init__()
         domain, task = env_id.split('-')
+        from dm_control import suite
+        from dm_control.suite.wrappers import pixels
         self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={'random': seed})
         self._env = pixels.Wrapper(self._env)
         self._env.action_space = self.action_size
