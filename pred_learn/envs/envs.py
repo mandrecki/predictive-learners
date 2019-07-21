@@ -31,6 +31,16 @@ Questions:
 
 import cv2
 import numpy as np
+
+import gym
+import gym_tetris
+from gym_tetris.actions import SIMPLE_MOVEMENT
+from nes_py.wrappers import JoypadSpace
+import gym_ple
+
+from dm_control import suite
+from dm_control.suite.wrappers import pixels
+
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
 
@@ -189,16 +199,11 @@ class GameEnv(AbstractEnv):
         super(GameEnv, self).__init__()
         extra_args = ENV_GAMES_ARGS.get(env_id, {})
         if env_id == "TetrisA-v2":
-            import gym_tetris
-            from gym_tetris.actions import SIMPLE_MOVEMENT
-            from nes_py.wrappers import JoypadSpace
             # TODO resize and crop observation
             self._env = JoypadSpace(gym_tetris.make(env_id, **extra_args), SIMPLE_MOVEMENT)
         elif 'ple' in env_id:
-            import gym_ple
             self._env = gym_ple.make(env_id, **extra_args)
         else:
-            import gym
             self._env = gym.make(env_id, **extra_args)
 
         self._env.seed(seed)
@@ -208,7 +213,7 @@ class GameEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
-        self.ep_reward = 0
+        # self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -224,7 +229,7 @@ class GameEnv(AbstractEnv):
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                info.update({'episode': {'r': self.ep_reward}})
+                # info.update({'episode': {'r': self.ep_reward}})
                 break
 
         return observation, reward, done, info
@@ -243,7 +248,6 @@ class GameEnv(AbstractEnv):
 class GymEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
         super(GymEnv, self).__init__()
-        import gym
         self._env = ToImageObservation(gym.make(env_id))
         self._env.seed(seed)
         self.action_repeat = GYM_ENVS_ACTION_REPEATS.get(env_id, 1)
@@ -252,7 +256,7 @@ class GymEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
-        self.ep_reward = 0
+        # self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -265,7 +269,7 @@ class GymEnv(AbstractEnv):
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                info.update({'episode': {'r': self.ep_reward}})
+                # info.update({'episode': {'r': self.ep_reward}})
                 break
         return observation, reward, done, info
 
@@ -283,8 +287,6 @@ class GymEnv(AbstractEnv):
 class ControlSuiteEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
         super(ControlSuiteEnv, self).__init__()
-        from dm_control import suite
-        from dm_control.suite.wrappers import pixels
         domain, task = env_id.split('-')
         self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={'random': seed})
         self._env = pixels.Wrapper(self._env)
@@ -301,7 +303,7 @@ class ControlSuiteEnv(AbstractEnv):
 
     def reset(self):
         self.t = 0  # Reset internal timer
-        self.ep_reward = 0
+        # self.ep_reward = 0
         observation = self._env.reset()
         return observation
 
@@ -314,7 +316,7 @@ class ControlSuiteEnv(AbstractEnv):
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                info.update({'episode': {'r': self.ep_reward}})
+                # info.update({'episode': {'r': self.ep_reward}})
                 break
         return observation, reward, done, info
 
