@@ -293,6 +293,9 @@ class ControlSuiteEnv(AbstractEnv):
         self._env = pixels.Wrapper(self._env)
         self._env.action_space = self.action_size
         self._env.observation_space = self.observation_size
+        self._env.reward_range = (-float('inf'), float('inf'))
+        self._env.metadata = self.metadata
+        self._env.spec = None
         self._env = UnSuite(self._env)
 
         self.action_repeat = CONTROL_SUITE_ACTION_REPEATS.get(domain, 1)
@@ -336,6 +339,11 @@ class ControlSuiteEnv(AbstractEnv):
     @property
     def action_size(self):
         return self._env.action_spec().shape[0]
+
+    @property
+    def action_space(self):
+        action_spec = self._env.action_spec()
+        return gym.spaces.Box(low=action_spec.minimum[0], high=action_spec.maximum[0], shape=action_spec.shape)
 
     # Sample an action randomly from a uniform distribution over all valid actions
     def sample_random_action(self):
