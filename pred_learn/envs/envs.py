@@ -40,7 +40,7 @@ import gym_ple
 
 
 
-from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack, ConcatNoise
+from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, ConcatNoise
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
 
 GAME_ENVS = [
