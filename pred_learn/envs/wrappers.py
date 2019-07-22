@@ -72,6 +72,55 @@ class UnSuite(gym.ObservationWrapper):
         return self._env.physics.render(camera_id=0)
 
 
+# Add detail
+class ConcatNoise(gym.ObservationWrapper):
+    def __init__(self, env, extra_channels=3):
+        super(ConcatNoise, self).__init__(env)
+        self.im_size = (64, 64)
+        self.channels = extra_channels + 3
+        self.observation_space = gym.spaces.Box(0, 255,
+                                                [*self.im_size, self.channels],
+                                                dtype=np.uint8)
+
+    def observation(self, observation):
+        detail_image = np.random.randint(0, 255, (64, 64, 3))
+        concat_image = np.concatenate((observation, detail_image), axis=2).astype(dtype=np.uint8)
+        return concat_image
+
+
+class ConcatRandomFrame(ConcatNoise):
+    def __init__(self, env, video_dir, extra_channels=3):
+        super(ConcatRandomFrame, self).__init__(env)
+        self.images = None
+
+    def load_images(self, video_dir):
+        pass
+
+    def observation(self, observation):
+        i = np.random.randint(0, self.images.shape[0])
+        detail_image = self.images[i, ...]
+        concat_image = np.concatenate((observation, detail_image), axis=2).astype(dtype=np.uint8)
+        return concat_image
+
+
+class ConcatVideo(ConcatRandomFrame):
+    def __init__(self, env, video_dir, extra_channels=3):
+        super(ConcatVideo, self).__init__(env)
+        self.i = None
+
+    def reset(self):
+        self.i = np.random.randint(0, self.images.shape[0])
+        obs = self._env.reset()
+        obs = self.observation(obs)
+        return obs
+
+    def observation(self, observation):
+        detail_image = self.images[self.i, ...]
+        self.i = (self.i + 1) % self.images.shape[0]
+        concat_image = np.concatenate((observation, detail_image), axis=2).astype(dtype=np.uint8)
+        return concat_image
+
+
 class VecPyTorch(VecEnvWrapper):
     def __init__(self, venv, device):
         """Return only every `skip`-th frame"""

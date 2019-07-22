@@ -46,6 +46,7 @@ if __name__ == "__main__":
     parser.add_argument('--file-number', default=0, type=int)
     parser.add_argument('--rl-model-path', default=None, help='rl model to load for action selection')
     parser.add_argument('--render', default=False, action='store_true', help='render or not')
+    parser.add_argument('--extra-detail', default=False, action='store_true', help='env with extra detail?')
     parser.add_argument('--ep-steps', default=4000,
                         help='maximum consecutive steps in env')
     parser.add_argument('--total-steps', default=2000, type=int,
@@ -58,9 +59,11 @@ if __name__ == "__main__":
     record_path = "{}/{}.torch".format(record_dir, args.file_number)
     video_path = "{}/{}.avi".format(record_dir, args.file_number)
 
+    extra_detail = args.extra_detail
+    env = make_env(args.env_id, np.random.randint(0, 10000), max_episode_length=args.ep_steps, extra_detail=extra_detail)
+
     if args.rl_model_path is not None:
         actor, _ = torch.load(args.rl_model_path)
-        buffer = ObsBuffer()
     else:
         actor = None
         print("No RL model provided. Taking random actions.")
@@ -70,16 +73,12 @@ if __name__ == "__main__":
     except FileExistsError:
         pass
 
-    # extra_args = ENV_GAMES_ARGS.get(args.env_id, {})
-    # env = gym_ple.make(args.env_id, **extra_args)
-
-    env = make_env(args.env_id, np.random.randint(0, 10000), max_episode_length=args.ep_steps)
-
     record = []
 
     while len(record) < args.total_steps:
         obs = env.reset()
         if actor:
+            buffer = ObsBuffer(channels=obs.shape[2])
             buffer.reset()
         while len(record) < args.total_steps:
             timestep = {}
@@ -89,19 +88,20 @@ if __name__ == "__main__":
                     buffer.add_obs(obs)
                     obs_tensor = buffer.get_tensor()
                     # im_display = obs_tensor[0, -CHANNELS:, ...].numpy().transpose([1, 2, 0]).astype('uint8')
-                    im_display = np.concatenate(np.split(obs_tensor[0, ...].numpy().transpose([1, 2, 0]).astype('uint8'), 4, axis=2), axis=1)
-
-                    _, action, _, _ = actor.act(obs_tensor, None, None)
-                    action = action.numpy()[0]
-                    if len(action) == 1:
-                        action = action[0]
-
+                    n_splits = 8 if extra_detail else 4
+                    im_display = np.concatenate(np.split(obs_tensor[0, ...].numpy().transpose([1, 2, 0]).astype('uint8'), n_splits, axis=2), axis=1)
                     if args.render:
                         plt.figure(1)
                         plt.clf()
                         plt.imshow(im_display)
                         plt.pause(0.05)
                         # print(action)
+
+                    _, action, _, _ = actor.act(obs_tensor, None, None)
+                    action = action.numpy()[0]
+                    if len(action) == 1:
+                        action = action[0]
+
             else:
                 action = env.sample_random_action()
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
             record.append(timestep)
 
             if args.render:
-                print(rew)
+                print("Reward:", rew)
 
             if done:
                 break

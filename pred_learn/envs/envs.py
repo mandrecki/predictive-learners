@@ -40,7 +40,7 @@ import gym_ple
 
 
 
-from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack
+from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack, ConcatNoise
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
 
 GAME_ENVS = [
@@ -111,7 +111,7 @@ CURRENT_ENVS = [
 ]
 
 
-def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, target_size=(PRED_SIZE, PRED_SIZE)):
+def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, extra_detail=False, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
@@ -126,6 +126,9 @@ def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, t
         env._env = CropImage(env._env, CROP_ENVS.get(env_id))
     if env.observation_size[0:2] != target_size:
         env._env = ResizeImage(env._env, target_size)
+
+    if extra_detail:
+        env._env = ConcatNoise(env._env)
 
     if pytorch_dim_order:
         env._env = TransposeImage(env._env)
