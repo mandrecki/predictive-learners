@@ -81,7 +81,7 @@ if __name__ == "__main__":
         obs = env.reset()
         if actor:
             buffer.reset()
-        while True:
+        while len(record) < args.total_steps:
             timestep = {}
             timestep["s0"] = np.copy(obs)
             if actor:
@@ -116,6 +116,9 @@ if __name__ == "__main__":
             timestep["r1"] = rew
             timestep["terminal"] = done
             record.append(timestep)
+
+            if args.render:
+                print(rew)
 
             if done:
                 break
