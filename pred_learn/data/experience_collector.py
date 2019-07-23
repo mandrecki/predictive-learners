@@ -18,6 +18,8 @@ from pred_learn.envs.envs import make_env
 from pred_learn.envs.envs import RL_SIZE, CHANNELS
 
 
+P_NO_ACTION = 0.1
+
 class ObsBuffer:
     def __init__(self, max_len=4, channels=CHANNELS):
         self.max_len = max_len
@@ -75,7 +77,15 @@ if __name__ == "__main__":
 
     record = []
 
+    if not args.render:
+        from pyvirtualdisplay import Display
+        display = Display(visible=0, size=(600, 500))
+        display.start()
+
     while len(record) < args.total_steps:
+        if len(record) % 1000 == 0:
+            print("Timestops so far...", len(record))
+
         obs = env.reset()
         if actor:
             buffer = ObsBuffer(channels=obs.shape[2])
@@ -105,6 +115,13 @@ if __name__ == "__main__":
 
             else:
                 action = env.sample_random_action()
+
+            # set action to null action
+            if np.random.rand() < P_NO_ACTION:
+                if np.isscalar(action):
+                    action = 0
+                else:
+                    action[:] = 0
 
             # if args.render:
             #     env.render()
