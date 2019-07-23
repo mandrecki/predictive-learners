@@ -111,7 +111,7 @@ class AE_Predictor(Predictor):
 
             o_0_enc = self.image_encoder(o_0).unsqueeze(1)
             # TODO add masking of o_t_enc (skip for initial ts)
-            if t < 2:
+            if t < 3:
                 out, belief = self.measurement_updater(o_0_enc, belief)
             else:
                 out, updated_belief = self.measurement_updater(o_0_enc, belief)

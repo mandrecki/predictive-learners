@@ -246,6 +246,9 @@ class GameEnv(AbstractEnv):
     def sample_random_action(self):
         return self._env.action_space.sample()
 
+    @property
+    def action_size(self):
+        return self._env.action_space.n
 
 class GymEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):

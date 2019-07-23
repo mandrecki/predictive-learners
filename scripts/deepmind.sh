@@ -23,7 +23,7 @@ ENV_STEPS=1000000
 
 RUNS=3
 
-EXP_NAME="cpbal-rnn-1"
+EXP_NAME="reacher-rnn-1"
 rm -r ../exp/$EXP_NAME/
 mkdir ../exp/$EXP_NAME/
 
