@@ -77,17 +77,17 @@ ENV_GAMES_ARGS = {
 
 
 GYM_ENVS = [ "CartPole-v0",
-    'Pendulum-v0', 'MountainCar-v0', 'Ant-v2', 'HalfCheetah-v2', 'Hopper-v2', 'Humanoid-v2',
-    'HumanoidStandup-v2', 'InvertedDoublePendulum-v2', 'InvertedPendulum-v2', 'Reacher-v2', 'Swimmer-v2',
-    'Walker2d-v2']
+    "Pendulum-v0", "MountainCar-v0", "Ant-v2", "HalfCheetah-v2", "HalfCheetah-v2", "Humanoid-v2",
+    "HumanoidStandup-v2", "InvertedDoublePendulum-v2", "InvertedPendulum-v2", "Reacher-v2", "Swimmer-v2",
+    "Walker2d-v2"]
 
 GYM_ENVS_ACTION_REPEATS = {
     "CarRacing-v0": 6,
 }
 
-CONTROL_SUITE_ENVS = ['cartpole-balance', 'cartpole-swingup', 'reacher-easy', 'finger-spin', 'cheetah-run',
-                      'ball_in_cup-catch', 'walker-walk']
-CONTROL_SUITE_ACTION_REPEATS = {'cartpole': 8, 'reacher': 4, 'finger': 2, 'cheetah': 4, 'ball_in_cup': 6, 'walker': 2}
+CONTROL_SUITE_ENVS = ["cartpole-balance", "cartpole-swingup", "reacher-easy", "finger-spin", "cheetah-run",
+                      "ball_in_cup-catch", "walker-walk"]
+CONTROL_SUITE_ACTION_REPEATS = {"cartpole": 8, "reacher": 4, "finger": 2, "cheetah": 4, "ball_in_cup": 6, "walker": 2}
 
 ALL_ENVS = GAME_ENVS + GYM_ENVS + CONTROL_SUITE_ENVS
 
@@ -107,11 +107,11 @@ CURRENT_ENVS = [
 
     # classics
     "CartPole-v0",
-    'MountainCar-v0',
+    "MountainCar-v0",
 ]
 
 
-def make_env(env_id, seed=0, max_episode_length=1000, pytorch_dim_order=False, extra_detail=False, target_size=(PRED_SIZE, PRED_SIZE)):
+def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=False, extra_detail=False, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
@@ -145,27 +145,27 @@ def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
     return _thunk
 
 
-def make_rl_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
-    envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
-
-    if len(envs) > 1:
-        envs = SubprocVecEnv(envs)
-    else:
-        envs = DummyVecEnv(envs)
-
-    envs = VecPyTorch(envs, device)
-
-    if num_frame_stack is not None:
-        envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
-    elif len(envs.observation_space.shape) == 3:
-        envs = VecPyTorchFrameStack(envs, 4, device)
-
-    return envs
+# def make_rl_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
+#     envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
+#
+#     if len(envs) > 1:
+#         envs = SubprocVecEnv(envs)
+#     else:
+#         envs = DummyVecEnv(envs)
+#
+#     envs = VecPyTorch(envs, device)
+#
+#     if num_frame_stack is not None:
+#         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+#     elif len(envs.observation_space.shape) == 3:
+#         envs = VecPyTorchFrameStack(envs, 4, device)
+#
+#     return envs
 
 
 class AbstractEnv:
-    metadata = {'render.modes': []}
-    reward_range = (-float('inf'), float('inf'))
+    metadata = {"render.modes": []}
+    reward_range = (-float("inf"), float("inf"))
     spec = None
     def __init__(self):
         self.ep_reward = 0
@@ -203,7 +203,7 @@ class GameEnv(AbstractEnv):
         if env_id == "TetrisA-v2":
             # TODO resize and crop observation
             self._env = JoypadSpace(gym_tetris.make(env_id, **extra_args), SIMPLE_MOVEMENT)
-        elif 'ple' in env_id:
+        elif "ple" in env_id:
             self._env = gym_ple.make(env_id, **extra_args)
         else:
             self._env = gym.make(env_id, **extra_args)
@@ -224,19 +224,19 @@ class GameEnv(AbstractEnv):
         reward = 0
         for k in range(self.action_repeat):
             observation, reward_k, done, info = self._env.step(action)
-            # image = self._env.render(mode='rgb_array')
+            # image = self._env.render(mode="rgb_array")
             # observation = cv2.resize(image, (64, 64), interpolation=cv2.INTER_LINEAR)
             reward += reward_k
             self.ep_reward += reward_k
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                # info.update({'episode': {'r': self.ep_reward}})
+                # info.update({"episode": {"r": self.ep_reward}})
                 break
 
         return observation, reward, done, info
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         self._env.render()
 
     def close(self):
@@ -271,7 +271,7 @@ class GymEnv(AbstractEnv):
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                # info.update({'episode': {'r': self.ep_reward}})
+                # info.update({"episode": {"r": self.ep_reward}})
                 break
         return observation, reward, done, info
 
@@ -289,14 +289,14 @@ class GymEnv(AbstractEnv):
 class ControlSuiteEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
         super(ControlSuiteEnv, self).__init__()
-        domain, task = env_id.split('-')
+        domain, task = env_id.split("-")
         from dm_control import suite
         from dm_control.suite.wrappers import pixels
-        self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={'random': seed})
+        self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={"random": seed})
         self._env = pixels.Wrapper(self._env)
         self._env.action_space = self.action_size
         self._env.observation_space = self.observation_size
-        self._env.reward_range = (-float('inf'), float('inf'))
+        self._env.reward_range = (-float("inf"), float("inf"))
         self._env.metadata = self.metadata
         self._env.spec = None
         self._env = UnSuite(self._env)
@@ -304,7 +304,7 @@ class ControlSuiteEnv(AbstractEnv):
         self.action_repeat = CONTROL_SUITE_ACTION_REPEATS.get(domain, 1)
         self.max_episode_length = max_episode_length * self.action_repeat
         if self.action_repeat != CONTROL_SUITE_ACTION_REPEATS[domain]:
-            print('Using action repeat %d; recommended action repeat for domain is %d' % (
+            print("Using action repeat %d; recommended action repeat for domain is %d" % (
                 self.action_repeat, CONTROL_SUITE_ACTION_REPEATS[domain]))
         self.t = 0
 
@@ -323,12 +323,12 @@ class ControlSuiteEnv(AbstractEnv):
             self.t += 1  # Increment internal timer
             done = done or self.t == self.max_episode_length
             if done:
-                # info.update({'episode': {'r': self.ep_reward}})
+                # info.update({"episode": {"r": self.ep_reward}})
                 break
         return observation, reward, done, info
 
     def render(self):
-        cv2.imshow('screen', self._env.physics.render(camera_id=0)[:, :, ::-1])
+        cv2.imshow("screen", self._env.physics.render(camera_id=0)[:, :, ::-1])
         cv2.waitKey(1)
 
     def close(self):
@@ -337,7 +337,7 @@ class ControlSuiteEnv(AbstractEnv):
 
     @property
     def observation_size(self):
-        return self._env.observation_spec()['pixels'].shape
+        return self._env.observation_spec()["pixels"].shape
 
     @property
     def action_size(self):

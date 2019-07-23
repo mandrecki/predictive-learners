@@ -79,6 +79,7 @@ if __name__ == "__main__":
         obs = env.reset()
         if actor:
             buffer = ObsBuffer(channels=obs.shape[2])
+            rnn_hxs = None
             buffer.reset()
         while len(record) < args.total_steps:
             timestep = {}
@@ -90,17 +91,17 @@ if __name__ == "__main__":
                     # im_display = obs_tensor[0, -CHANNELS:, ...].numpy().transpose([1, 2, 0]).astype('uint8')
                     n_splits = 8 if extra_detail else 4
                     im_display = np.concatenate(np.split(obs_tensor[0, ...].numpy().transpose([1, 2, 0]).astype('uint8'), n_splits, axis=2), axis=1)
+                    _, action, _, rnn_hxs = actor.act(obs_tensor, rnn_hxs, None)
+                    action = action.numpy()[0]
+                    if len(action) == 1:
+                        action = action[0]
+
                     if args.render:
                         plt.figure(1)
                         plt.clf()
                         plt.imshow(im_display)
                         plt.pause(0.05)
-                        # print(action)
 
-                    _, action, _, _ = actor.act(obs_tensor, None, None)
-                    action = action.numpy()[0]
-                    if len(action) == 1:
-                        action = action[0]
 
             else:
                 action = env.sample_random_action()
@@ -118,6 +119,7 @@ if __name__ == "__main__":
             record.append(timestep)
 
             if args.render:
+                print("Action:", action)
                 print("Reward:", rew)
 
             if done:
