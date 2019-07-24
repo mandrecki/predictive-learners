@@ -13,7 +13,7 @@ import argparse
 
 from baselines import bench
 
-from pred_learn.utils import states2video
+from pred_learn.utils import states2video, stack2imseq
 from pred_learn.envs.envs import make_rl_envs
 from pred_learn.envs.envs import RL_SIZE, CHANNELS
 
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Gym recorder')
     parser.add_argument('--env-id', default='Pong-ple-v0',
                         help='env to record (see list in env_configs.py')
-    parser.add_argument('--file-number', default=0, type=int)
+    parser.add_argument('--file-appendix', default="0", type=str)
     parser.add_argument('--rl-model-path', default=None, help='rl model to load for action selection')
     parser.add_argument('--render', default=False, action='store_true', help='render or not')
     parser.add_argument('--extra-video', default=False, action='store_true', help='env with extra detail?')
@@ -58,19 +58,20 @@ if __name__ == "__main__":
     print("args given:", args)
 
     record_dir = "recorded/{}/".format(args.env_id)
-    record_path = "{}/{}.torch".format(record_dir, args.file_number)
-    video_path = "{}/{}.avi".format(record_dir, args.file_number)
+    record_path = "{}/{}.torch".format(record_dir, args.file_appendix)
+    video_path = "{}/{}.avi".format(record_dir, args.file_appendix)
 
     assert not (args.extra_video and args.extra_image)
     extra_detail = args.extra_video or args.extra_image
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    env = make_rl_envs(args.env_id, seed=np.random.randint(0, 10000), n_envs=1,
-                       device=device,
-                       frame_stack=True,
-                       add_video=args.extra_video, add_frames=args.extra_image,
-                       vid_path=args.video_path)
+    # device = "cpu"
+    envs = make_rl_envs(args.env_id, seed=np.random.randint(0, 10000), n_envs=1,
+                        device=device,
+                        frame_stack=True,
+                        add_video=args.extra_video, add_frames=args.extra_image,
+                        vid_path=args.video_path)
 
-    channels = env.observation_space.shape[0]//4
+    channels = envs.observation_space.shape[0] // 4
 
     if args.rl_model_path is not None:
         actor, _ = torch.load(args.rl_model_path)
@@ -92,12 +93,9 @@ if __name__ == "__main__":
         display.start()
 
     while len(record) < args.total_steps:
-        obs = env.reset()
-        im = obs.squeeze(0).cpu().numpy().transpose([1, 2, 0])[:, :, -channels:]
-
+        obs = envs.reset()
+        im = obs[0, ...].cpu().numpy().transpose([1, 2, 0])[:, :, -channels:].astype("uint8")
         if actor:
-            buffer = ObsBuffer(channels=channels)
-            buffer.reset()
             rnn_hxs = None
         while len(record) < args.total_steps:
             if len(record) % 1000 == 0:
@@ -107,24 +105,17 @@ if __name__ == "__main__":
             timestep["s0"] = np.copy(im)
             if actor:
                 with torch.no_grad():
-                    buffer.add_obs(im)
-                    obs_tensor = buffer.get_tensor()
-                    n_splits = 8 if extra_detail else 4
-                    im_display = obs_tensor[0, ...].numpy().transpose([1, 2, 0]).astype('uint8')
-                    im_display = np.concatenate(np.split(im_display, n_splits, axis=2), axis=1)
-                    obs_tensor = obs_tensor.to(device)
-                    _, action, _, rnn_hxs = actor.act(obs_tensor, rnn_hxs, None)
-                    action = action.cpu()
+                    _, action, _, rnn_hxs = actor.act(obs, rnn_hxs, None)
 
                     if args.render:
                         plt.figure(1)
                         plt.clf()
+                        im_display = stack2imseq(obs)
                         plt.imshow(im_display)
                         plt.pause(0.05)
 
-
             else:
-                action = env.sample_random_action()
+                action = envs.sample_random_action()
 
             # set action to null action
             if np.random.rand() < P_NO_ACTION:
@@ -134,21 +125,22 @@ if __name__ == "__main__":
             #     env.render()
             #     plt.pause(0.02)
 
-            timestep["a0"] = action
-            obs, rew, done, info = env.step(action)
-            im = obs.squeeze(0).cpu().numpy().transpose([1, 2, 0])[:, :, -channels:]
+            timestep["a0"] = action[0, ...].cpu().numpy()
+            obs, rew, done, info = envs.step(action)
+            im = obs[0, ...].cpu().numpy().transpose([1, 2, 0])[:, :, -channels:].astype("uint8")
 
             timestep["s1"] = np.copy(im)
-            timestep["r1"] = rew
-            timestep["terminal"] = done
+            timestep["r1"] = rew[0, ...].cpu().numpy()
+            timestep["terminal"] = done[0, ...]
             record.append(timestep)
 
-            if args.render:
-                print("Action:", action)
-                print("Reward:", rew)
+            # if args.render:
+            #     print("Action:", action)
+            #     print("Reward:", rew)
 
-            if done:
+            if done[0, ...]:
                 break
 
+    envs.close()
     torch.save(record, record_path)
     states2video(record, video_path)

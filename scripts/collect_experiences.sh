@@ -26,8 +26,9 @@ do
     for j in `seq 1 $RUNS`
     do
         echo "Running "${ENV_NAMES[i]}
-        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-number $j --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --render --extra-video
-        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-number $j --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/base/ppo/"${ENV_NAMES[i]}"-1.pt --render
+        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "video-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --extra-video #--render
+        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "image-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --extra-image #--render
+        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "base-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/base/ppo/"${ENV_NAMES[i]}"-1.pt #--render
 #        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-number $j --total-steps 1000 --rl-model-path ../trained_models/ppo/"${ENV_NAMES[i]}"-1-detail.pt --render --extra-video
 
     done

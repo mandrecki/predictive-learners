@@ -3,7 +3,7 @@
 export PYGAME_HIDE_SUPPORT_PROMPT=1
 SEED_OFFSET=0
 # cluster runnable
-ENV_NAMES=(   "PixelCopter-ple-v0" "Pong-ple-v0" "TetrisA-v2" "Catcher-ple-v0" )
+ENV_NAMES=(  "Pong-ple-v0" "TetrisA-v2" "Catcher-ple-v0" "PixelCopter-ple-v0"  )
 #ENV_NAMES=("TetrisA-v2" )
 
 ENV_STEPS=1000000
