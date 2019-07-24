@@ -13,7 +13,7 @@ import argparse
 
 from baselines import bench
 
-from pred_learn.utils import states2video, stack2imseq
+from pred_learn.utils import states2video, stack2wideim
 from pred_learn.envs.envs import make_rl_envs
 from pred_learn.envs.envs import RL_SIZE, CHANNELS
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
                     if args.render:
                         plt.figure(1)
                         plt.clf()
-                        im_display = stack2imseq(obs)
+                        im_display = stack2wideim(obs)
                         plt.imshow(im_display)
                         plt.pause(0.05)
 
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
             timestep["s1"] = np.copy(im)
             timestep["r1"] = rew[0, ...].cpu().numpy()
-            timestep["terminal"] = done[0, ...]
+            timestep["terminal"] = done[0, ...].item()
             record.append(timestep)
 
             # if args.render:
