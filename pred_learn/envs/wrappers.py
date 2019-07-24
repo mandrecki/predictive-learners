@@ -3,7 +3,7 @@ import gym
 import cv2
 import torch
 
-from baselines.common.vec_env import VecEnvWrapper
+from baselines.common.vec_env import VecEnvWrapper, VecEnvObservationWrapper
 
 
 # Standardising environments
@@ -89,12 +89,9 @@ class ConcatNoise(gym.ObservationWrapper):
 
 
 class ConcatRandomFrame(ConcatNoise):
-    def __init__(self, env, video_dir, extra_channels=3):
+    def __init__(self, env, im_file, extra_channels=3):
         super(ConcatRandomFrame, self).__init__(env)
-        self.images = None
-
-    def load_images(self, video_dir):
-        pass
+        self.images = torch.load(im_file)
 
     def observation(self, observation):
         i = np.random.randint(0, self.images.shape[0])
@@ -104,8 +101,8 @@ class ConcatRandomFrame(ConcatNoise):
 
 
 class ConcatVideo(ConcatRandomFrame):
-    def __init__(self, env, video_dir, extra_channels=3):
-        super(ConcatVideo, self).__init__(env)
+    def __init__(self, env, im_file, extra_channels=3):
+        super(ConcatVideo, self).__init__(env, im_file)
         self.i = None
 
     def reset(self):
@@ -121,72 +118,113 @@ class ConcatVideo(ConcatRandomFrame):
         return concat_image
 
 
-# class VecPyTorch(VecEnvWrapper):
-#     def __init__(self, venv, device):
-#         """Return only every `skip`-th frame"""
-#         super(VecPyTorch, self).__init__(venv)
-#         self.device = device
-#         # TODO: Fix data types
-#
-#     def reset(self):
-#         obs = self.venv.reset()
-#         obs = torch.from_numpy(obs).float().to(self.device)
-#         return obs
-#
-#     def step_async(self, actions):
-#         actions = actions.squeeze(1).cpu().numpy()
-#         self.venv.step_async(actions)
-#
-#     def step_wait(self):
-#         obs, reward, done, info = self.venv.step_wait()
-#         obs = torch.from_numpy(obs).float().to(self.device)
-#         reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
-#         return obs, reward, done, info
-#
-#
-# # Derived from
-# # https://github.com/openai/baselines/blob/master/baselines/common/vec_env/vec_frame_stack.py
-# class VecPyTorchFrameStack(VecEnvWrapper):
-#     def __init__(self, venv, nstack, device=None):
-#         self.venv = venv
-#         self.nstack = nstack
-#
-#         wos = venv.observation_space  # wrapped ob space
-#         self.shape_dim0 = wos.shape[0]
-#
-#         low = np.repeat(wos.low, self.nstack, axis=0)
-#         high = np.repeat(wos.high, self.nstack, axis=0)
-#
-#         if device is None:
-#             device = torch.device('cpu')
-#         self.stacked_obs = torch.zeros((venv.num_envs,) + low.shape).to(device)
-#
-#         observation_space = gym.spaces.Box(
-#             low=low, high=high, dtype=venv.observation_space.dtype)
-#         VecEnvWrapper.__init__(self, venv, observation_space=observation_space)
-#
-#     def step_wait(self):
-#         obs, rews, news, infos = self.venv.step_wait()
-#         self.stacked_obs[:, :-self.shape_dim0] = \
-#             self.stacked_obs[:, self.shape_dim0:]
-#         for (i, new) in enumerate(news):
-#             if new:
-#                 self.stacked_obs[i] = 0
-#         self.stacked_obs[:, -self.shape_dim0:] = obs
-#         return self.stacked_obs, rews, news, infos
-#
-#     def reset(self):
-#         obs = self.venv.reset()
-#         if torch.backends.cudnn.deterministic:
-#             self.stacked_obs = torch.zeros(self.stacked_obs.shape)
-#         else:
-#             self.stacked_obs.zero_()
-#         self.stacked_obs[:, -self.shape_dim0:] = obs
-#         return self.stacked_obs
-#
-#     def close(self):
-#         self.venv.close()
+class VecConcatVideo(VecEnvObservationWrapper):
+    def __init__(self, venv, im_file, ordered=True):
+        self.images = torch.load(im_file)
+        self.data_len = self.images.shape[0]
+        self.ordered = ordered
+        self.indices = None
 
+        self.venv = venv
+        wos = venv.observation_space  # wrapped ob space
+        observation_space = gym.spaces.Box(
+            wos.low[0, 0, 0],
+            wos.high[0, 0, 0],
+            shape=[6, 64, 64],
+            dtype=wos.dtype)
+
+        super(VecConcatVideo, self).__init__(venv, observation_space=observation_space)
+
+    # def observation(self, observation):
+    #     new_ims = self.images[self.indices, ...].transpose(2, 0, 1)
+    #     observation = np.concatenate([observation, new_ims], axis=1)
+    #     if self.ordered:
+    #         self.indices = (self.indices + 1) % self.data_len
+    #     else:
+    #         self.indices = np.random.randint(0, self.data_len, self.num_envs)
+    #     return observation
+
+    def process(self, observation):
+        new_ims = self.images[self.indices, ...].transpose(0, 3, 1, 2)
+        observation = np.concatenate([observation, new_ims], axis=1)
+        if self.ordered:
+            self.indices = (self.indices + 1) % self.data_len
+        else:
+            self.indices = np.random.randint(0, self.data_len, self.num_envs)
+        return observation
+
+    def reset(self):
+        self.indices = np.random.randint(0, self.data_len, self.num_envs)
+        obs = self.venv.reset()
+        obs = self.process(obs)
+        return obs
+
+
+class VecPyTorch(VecEnvWrapper):
+    def __init__(self, venv, device):
+        """Return only every `skip`-th frame"""
+        super(VecPyTorch, self).__init__(venv)
+        self.device = device
+        # TODO: Fix data types
+
+    def reset(self):
+        obs = self.venv.reset()
+        obs = torch.from_numpy(obs).float().to(self.device)
+        return obs
+
+    def step_async(self, actions):
+        actions = actions.squeeze(1).cpu().numpy()
+        self.venv.step_async(actions)
+
+    def step_wait(self):
+        obs, reward, done, info = self.venv.step_wait()
+        obs = torch.from_numpy(obs).float().to(self.device)
+        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
+        return obs, reward, done, info
+
+
+# Derived from
+# https://github.com/openai/baselines/blob/master/baselines/common/vec_env/vec_frame_stack.py
+class VecPyTorchFrameStack(VecEnvWrapper):
+    def __init__(self, venv, nstack, device=None):
+        self.venv = venv
+        self.nstack = nstack
+
+        wos = venv.observation_space  # wrapped ob space
+        self.shape_dim0 = wos.shape[0]
+
+        low = np.repeat(wos.low, self.nstack, axis=0)
+        high = np.repeat(wos.high, self.nstack, axis=0)
+
+        if device is None:
+            device = torch.device('cpu')
+        self.stacked_obs = torch.zeros((venv.num_envs,) + low.shape).to(device)
+
+        observation_space = gym.spaces.Box(
+            low=low, high=high, dtype=venv.observation_space.dtype)
+        VecEnvWrapper.__init__(self, venv, observation_space=observation_space)
+
+    def step_wait(self):
+        obs, rews, news, infos = self.venv.step_wait()
+        self.stacked_obs[:, :-self.shape_dim0] = \
+            self.stacked_obs[:, self.shape_dim0:]
+        for (i, new) in enumerate(news):
+            if new:
+                self.stacked_obs[i] = 0
+        self.stacked_obs[:, -self.shape_dim0:] = obs
+        return self.stacked_obs, rews, news, infos
+
+    def reset(self):
+        obs = self.venv.reset()
+        if torch.backends.cudnn.deterministic:
+            self.stacked_obs = torch.zeros(self.stacked_obs.shape)
+        else:
+            self.stacked_obs.zero_()
+        self.stacked_obs[:, -self.shape_dim0:] = obs
+        return self.stacked_obs
+
+    def close(self):
+        self.venv.close()
 
 class TransposeImage(gym.ObservationWrapper):
     def __init__(self, env=None):

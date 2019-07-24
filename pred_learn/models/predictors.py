@@ -59,6 +59,8 @@ class Predictor(nn.Module):
         # VAE or beta-VAE or other
         self.regularisation_loss = None
 
+        self.action_space = None
+
         self.image_encoder = models.get("image_encoder", None)
         self.action_encoder = models.get("action_encoder", None)
         self.image_decoder = models.get("image_decoder", None)
@@ -67,36 +69,74 @@ class Predictor(nn.Module):
         self.action_propagator = models.get("action_propagator", None)
         self.env_propagator = models.get("env_propagator", None)
 
-    def forward(self, *tensors):
-        raise NotImplemented
+    def encode_obs(self, obs):
+        obs_enc = self.image_encoder(obs).unsqueeze(1)
+        return obs_enc
+
+    def update_belief_maybe(self, obs, belief, p=1):
+        assert 0 <= p <= 1
+        if belief is None:
+            assert p == 1
+
+        obs_enc = self.encode_obs(obs)
+        if p == 1:
+            out, belief = self.measurement_updater(obs_enc, belief)
+        else:
+            out, updated_belief = self.measurement_updater(obs, belief)
+
+            mask = torch.ones(updated_belief.size(), device=obs_enc.device)
+            skip = torch.ByteTensor(np.random.rand(batch_size) < self.skip_update_p, device=obs.device)
+            mask[:, skip, ...] = 0
+            belief = mask * updated_belief + (1 - mask) * belief
+
+        return out, belief
+
+    def decode_belief(self, belief):
+        obs_recon = self.image_decoder(belief)
+        return obs_recon
+
+    def encode_action(self, action):
+        action_enc = self.action_encoder(action).unsqueeze(1)
+        return action_enc
+
+    def get_null_action_mask(self, action):
+        # one hot discrete actions
+        if action.dim() == 2:
+            mask = torch.ones(updated_belief.size(), device=action.device)
+
+    def propagate_action_conseq(self, belief, action, skip_null_action=True):
+        action_enc = self.encode_action(action)
+        out, updated_belief = self.action_propagator(action_enc, belief)
+
+        if skip_null_action:
+            mask = torch.ones(updated_belief.size(), device=o_0.device)
+            # null_actions
+
+            skip = (a_0 == 0).view(-1).cuda().byte()
+            mask[:, skip, ...] = 0
+            belief = mask * updated_belief + (1 - mask) * belief
+        else:
+            belief = updated_belief
 
 
-class AE_Predictor(Predictor):
-    def __init__(self, action_dim, models={}):
-        super(AE_Predictor, self).__init__()
 
-        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator
+    def predict_full(self, o_series, a_series):
+        batch_size = o_series.size(0)
+        series_len = o_series.size(1)
+        belief = None
+        o_recons = []
+        o_predictions = []
+        for t in range(series_len):
+            o_0 = o_series[:, t, ...]
+            a_0 = a_series[:, t, ...]
 
-        self.transition_is_determininstic = True
-        self.observation_is_determininstic = True
-        self.reward_is_determininstic = True
+            update_probability = 0.5 if t > 3 else 1
+            belief_out, belief = self.maybe_update_belief(o_0, belief, update_probability)
 
-        self.skip_update_p = 0.5
-        self.skip_null_action = True
+            o_0_recon = self.decode_belief(belief_out)
+            o_recons.append(o_0_recon.unsqueeze(1))
 
-        # mse or likelihood
-        self.recon_loss = None
-        # VAE or beta-VAE or other
-        self.regularisation_loss = None
-
-        self.image_encoder = models.get("image_encoder", Encoder())
-        self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
-        self.image_decoder = models.get("image_decoder", Decoder())
-
-        self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
-        self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
-
-        self.env_propagator = models.get("state_propagator", BeliefStatePropagator())
+            belief_out, belief = self.propagate_action_conseq(belief, a_0)
 
     def generate_predictions(self, o_series, a_series):
         batch_size = o_series.size(0)
@@ -132,6 +172,8 @@ class AE_Predictor(Predictor):
                 skip = (a_0 == 0).view(-1).cuda().byte()
                 mask[:, skip, ...] = 0
                 belief = mask * updated_belief + (1 - mask) * belief
+            else:
+                belief = updated_belief
 
             out, belief = self.env_propagator(out, belief)
             o_prediction = self.image_decoder(out)
@@ -140,6 +182,38 @@ class AE_Predictor(Predictor):
         o_recons = torch.cat(o_recons, dim=1)
         o_predictions = torch.cat(o_predictions, dim=1)
         return o_recons, o_predictions
+
+    def forward(self, *tensors):
+        raise NotImplemented
+
+
+class AE_Predictor(Predictor):
+    def __init__(self, action_dim, models={}):
+        super(AE_Predictor, self).__init__()
+
+        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator
+
+        self.transition_is_determininstic = True
+        self.observation_is_determininstic = True
+        self.reward_is_determininstic = True
+
+        self.skip_update_p = 0.5
+        self.skip_null_action = True
+
+        # mse or likelihood
+        self.recon_loss = None
+        # VAE or beta-VAE or other
+        self.regularisation_loss = None
+
+        self.image_encoder = models.get("image_encoder", Encoder())
+        self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
+        self.image_decoder = models.get("image_decoder", Decoder())
+
+        self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
+        self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
+
+        self.env_propagator = models.get("state_propagator", BeliefStatePropagator())
+
 
     def forward(self, *tensors):
         assert 0 < len(tensors) <= 2

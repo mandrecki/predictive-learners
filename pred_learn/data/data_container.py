@@ -28,8 +28,8 @@ class ObservationDataset(Dataset):
             action[timestep["a0"]] = 1
 
         sample = {
-            "s0": torch.FloatTensor(timestep["s0"]/255).permute([2, 1, 0]),
-            "s1": torch.FloatTensor(timestep["s1"]/255).permute([2, 1, 0]),
+            "s0": torch.FloatTensor(timestep["s0"]/255).permute([2, 0, 1]),
+            "s1": torch.FloatTensor(timestep["s1"]/255).permute([2, 0, 1]),
             "a0": torch.LongTensor(action),
             "r1": torch.FloatTensor([timestep["r1"]]),
             "terminal": torch.ByteTensor([timestep["terminal"]]),
@@ -74,15 +74,15 @@ class ObservationSeriesDataset(Dataset):
         }
         for i in range(idx, idx+self.series_length):
             timestep = self.record[i]
-            s0 = timestep["s0"]/255
-            s1 = timestep["s1"]/255
+            s0 = timestep["s0"]
+            s1 = timestep["s1"]
             if self.subtract_average:
                 s0 -= self.average_im
                 s1 -= self.average_im
 
-            sample["s0"].append(torch.FloatTensor(s0).permute([2, 1, 0]).unsqueeze(0))
-            sample["s1"].append(torch.FloatTensor(s1).permute([2, 1, 0]).unsqueeze(0))
-            sample["a0"].append(torch.LongTensor([timestep["a0"]]).unsqueeze(0))
+            sample["s0"].append(torch.Tensor(s0).permute([2, 0, 1]).unsqueeze(0))
+            sample["s1"].append(torch.Tensor(s1).permute([2, 0, 1]).unsqueeze(0))
+            sample["a0"].append(torch.Tensor([timestep["a0"]]).unsqueeze(0))
             sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
             sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]).unsqueeze(0))
 
@@ -100,9 +100,27 @@ class ImageDataset(Dataset):
         super(ImageDataset, self).__init__()
         self.images = torch.load(filepath)
 
+    def __len__(self):
+        return self.images.shape[0]
+
+    def __getitem__(self, idx):
+        im = self.images[idx, ...]
+        sample = torch.Tensor(im).permute([2, 0, 1])
+        return sample
 
 
 class ImageSeriesDataset(ImageDataset):
-    def __init__(self, filepath, series_length):
+    def __init__(self, filepath, series_length, ordered=True):
         super(ImageSeriesDataset, self).__init__(filepath)
         self.series_length = series_length
+        self.ordered = ordered
+
+    def __getitem__(self, idx):
+        if self.ordered:
+            idx = min(idx, len(self) - self.series_length - 1)
+            im = self.images[idx:idx+self.series_length, ...]
+        else:
+            im = self.images[np.random.randint(0, len(self), self.series_length), ...]
+
+        sample = torch.Tensor(im).permute([0, 3, 1, 2])
+        return sample

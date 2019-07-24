@@ -28,9 +28,13 @@ Questions:
 -> Agent, as some agents (model-free) may choose not to drop bits.
 
 """
-
+import os
 import cv2
 import numpy as np
+from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
+from baselines import bench
+
+
 
 import gym
 import gym_tetris
@@ -39,9 +43,7 @@ from nes_py.wrappers import JoypadSpace
 import gym_ple
 
 
-
-from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, ConcatNoise
-from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
+from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecConcatVideo
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -111,7 +113,7 @@ CURRENT_ENVS = [
 ]
 
 
-def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=False, extra_detail=False, target_size=(PRED_SIZE, PRED_SIZE)):
+def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=True, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
@@ -127,40 +129,46 @@ def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=False
     if env.observation_size[0:2] != target_size:
         env._env = ResizeImage(env._env, target_size)
 
-    if extra_detail:
-        env._env = ConcatNoise(env._env)
+    # if extra_detail:
+    #     env._env = ConcatNoise(env._env)
 
     if pytorch_dim_order:
         env._env = TransposeImage(env._env)
-
-    # env._env = bench.Monitor(env._env, filename=None, allow_early_resets=True)
+    #
+    env._env = bench.Monitor(env._env, filename=None, allow_early_resets=True)
 
     return env
 
 
 def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
     def _thunk():
-        return make_env(env_id, seed=seed, pytorch_dim_order=True, target_size=target_size, **kwargs)
+        env = make_env(env_id, seed=seed, pytorch_dim_order=True, target_size=target_size, **kwargs)
+        return env
 
     return _thunk
 
 
-# def make_rl_envs(env_id, n_envs, seed, device, num_frame_stack=None, **kwargs):
-#     envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
-#
-#     if len(envs) > 1:
-#         envs = SubprocVecEnv(envs)
-#     else:
-#         envs = DummyVecEnv(envs)
-#
-#     envs = VecPyTorch(envs, device)
-#
-#     if num_frame_stack is not None:
-#         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
-#     elif len(envs.observation_space.shape) == 3:
-#         envs = VecPyTorchFrameStack(envs, 4, device)
-#
-#     return envs
+def make_rl_envs(env_id, seed, n_envs, device, frame_stack=False, add_video=False, add_frames=False, vid_path=None, **kwargs):
+    envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
+
+    if len(envs) > 1:
+        envs = SubprocVecEnv(envs)
+    else:
+        envs = DummyVecEnv(envs)
+
+    if add_video:
+        assert vid_path is not None
+        envs = VecConcatVideo(envs, vid_path, ordered=True)
+    elif add_frames:
+        assert vid_path is not None
+        envs = VecConcatVideo(envs, vid_path, ordered=False)
+
+    envs = VecPyTorch(envs, device)
+
+    if frame_stack:
+        envs = VecPyTorchFrameStack(envs, 4, device)
+
+    return envs
 
 
 class AbstractEnv:
