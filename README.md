@@ -21,6 +21,7 @@ pip install -e .
 
 * pytorch
 * numpy
+* https://github.com/EqThinker/pytorch-a2c-ppo-acktr (for RL)
 * pandas
 * opencv-python
 * pyvirtualdisplay
