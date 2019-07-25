@@ -5,6 +5,7 @@ For evaluating agents that learn predictive models and then use those in RL sett
 ## Installation
 
 Lots of requirements, might streamline this later.
+Tested on Python3.6.
 
 Then clone this repo, install requirements, install this package:
 
