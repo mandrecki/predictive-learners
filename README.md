@@ -10,6 +10,7 @@ Then clone this repo, install requirements, install this package:
 
 ```
 git clone https://github.com/EqThinker/predictive-learners.git
+pip install tensorflow # (consider GPU supporting version)
 cd predictive-learners
 pip install -r requirements.txt
 pip install -e .
