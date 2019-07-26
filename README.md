@@ -2,44 +2,44 @@
 
 For evaluating agents that learn predictive models and then use those in RL setting.
 
-# Trello board
-
-[Predictive learners](https://trello.com/b/tvFFyOnu/predictive-learners)
-
 ## Installation
 
-Not available right now.
+Lots of requirements, might streamline this later.
+Tested on Python3.6.
+
+Then clone this repo, install requirements, install this package:
+
+```
+git clone https://github.com/EqThinker/predictive-learners.git
+pip install tensorflow # (consider GPU supporting version)
+cd predictive-learners
+pip install -r requirements.txt
+pip install -e .
+```
 
 ### Requirements
 
 * pytorch
 * numpy
-* plotly
+* https://github.com/EqThinker/pytorch-a2c-ppo-acktr (for RL)
+* pandas
+* opencv-python
 * pyvirtualdisplay
+* more see requirements.txt
 
-Environments
+Gyms (install only those that you're planning to run)
 * gym
 * gym_ple
 * gym_tetris
 * mujoco
+* deepmind suite
 
 ## Environments available
-
-* CarRacing-v0
-* Snake-ple-v0
-* Tetris-v0
-* PuckWorld-ple-v0
-* WaterWorld-ple-v0
-* PixelCopter-ple-v0
-* CubeCrash-v0
-* Catcher-ple-v0
-* Pong-ple-v0
-* more...
+* gym classics: CartPole, MountainCar, etc.
+* games: CarRacing, PixelCopter, Tetris, etc.
+* Deepmind control suite: 
 
 
 ## Running experiments
 
-Not available
-
-## Example outputs
-
+Use files in scripts as starting point
