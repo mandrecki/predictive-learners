@@ -53,6 +53,8 @@ if __name__ == "__main__":
     parser.add_argument('--video-path', default="../clean_records/test_vid.torch", help='path to ordered images')
     parser.add_argument('--total-steps', default=2000, type=int,
                         help='total steps to record')
+    parser.add_argument('--recurrent-policy', action='store_true', default=False,
+                        help='use a recurrent policy')
 
     args = parser.parse_args()
     print("args given:", args)
@@ -64,14 +66,15 @@ if __name__ == "__main__":
     assert not (args.extra_video and args.extra_image)
     extra_detail = args.extra_video or args.extra_image
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    frame_stack = 1 if args.recurrent_policy else 4
     # device = "cpu"
     envs = make_rl_envs(args.env_id, seed=np.random.randint(0, 10000), n_envs=1,
                         device=device,
-                        frame_stack=True,
+                        frame_stack=frame_stack,
                         add_video=args.extra_video, add_frames=args.extra_image,
                         vid_path=args.video_path)
 
-    channels = envs.observation_space.shape[0] // 4
+    channels = envs.observation_space.shape[0] // frame_stack
 
     if args.rl_model_path is not None:
         actor, _ = torch.load(args.rl_model_path)

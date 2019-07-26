@@ -32,12 +32,12 @@ def full_weight_init(model):
 
 
 class Encoder(nn.Module):
-    def __init__(self, v_size=V_SIZE):
+    def __init__(self, im_channels=3, v_size=V_SIZE):
         super(Encoder, self).__init__()
         self.conv_seq = nn.Sequential(
             # out_size = (in_size - kernel_size + 2*padding)/stride + 1
             # size: (channels, 64, 64)
-            nn.Conv2d(IM_CHANNELS, 32, 4, stride=2),
+            nn.Conv2d(im_channels, 32, 4, stride=2),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 64, 4, stride=2),
             nn.ReLU(inplace=True),
@@ -64,7 +64,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, bs_size=BS_SIZE):
+    def __init__(self, im_channels=3, bs_size=BS_SIZE):
         super(Decoder, self).__init__()
         self.fc_seq = nn.Sequential(
             nn.Linear(bs_size, 1024),
@@ -80,7 +80,7 @@ class Decoder(nn.Module):
             nn.ReLU(True),
             nn.ConvTranspose2d(64, 32, 6, stride=2),
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, IM_CHANNELS, 6, stride=2),
+            nn.ConvTranspose2d(32, im_channels, 6, stride=2),
             nn.Sigmoid(),
         )
         # self.apply(full_weight_init)
@@ -103,7 +103,7 @@ class ActionEncoder(nn.Module):
 
     def forward(self, actions):
         batch_size = actions.size(0)
-        a_onehot = torch.zeros((batch_size, self.action_dim), device=actions.device)
+        a_onehot = torch.zeros((batch_size, self.action_dim), device=actions.device).float()
         a_onehot[range(batch_size), actions.view(-1)] = 1
         out = self.fc_seq(a_onehot)
         return out
@@ -122,6 +122,22 @@ class BeliefStatePropagator(nn.Module):
 
         out, h = self.gru(x, h)
         return out, h
+
+
+class SimpleFF(nn.Module):
+    def __init__(self, v_size=V_SIZE):
+        super(SimpleFF, self).__init__()
+        self.fc_seq = nn.Sequential(
+            nn.Linear(v_size, v_size),
+            nn.ReLU(inplace=True),
+            nn.Linear(v_size, v_size),
+            nn.ReLU(inplace=True),
+            # nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        out = self.fc_seq(x)
+        return out
 
 
 class SimpleAE(nn.Module):

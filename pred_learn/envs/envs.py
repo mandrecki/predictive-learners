@@ -148,7 +148,7 @@ def env_generator(env_id, seed=0, target_size=(RL_SIZE, RL_SIZE), **kwargs):
     return _thunk
 
 
-def make_rl_envs(env_id, seed, n_envs, device, frame_stack=False, add_video=False, add_frames=False, vid_path=None, **kwargs):
+def make_rl_envs(env_id, seed, n_envs, device, frame_stack=4, add_video=False, add_frames=False, vid_path=None, **kwargs):
     envs = [env_generator(env_id, seed=seed+1000*i) for i in range(n_envs)]
 
     if len(envs) > 1:
@@ -165,8 +165,8 @@ def make_rl_envs(env_id, seed, n_envs, device, frame_stack=False, add_video=Fals
 
     envs = VecPyTorch(envs, device)
 
-    if frame_stack:
-        envs = VecPyTorchFrameStack(envs, 4, device)
+    if frame_stack > 1:
+        envs = VecPyTorchFrameStack(envs, frame_stack, device)
 
     return envs
 

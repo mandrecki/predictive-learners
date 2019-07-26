@@ -19,21 +19,21 @@ ENV_NAMES=( "Pong-ple-v0" "PixelCopter-ple-v0" "Catcher-ple-v0" ) # "TetrisA-v2"
 #ENV_NAMES=( "CarRacing-v0" )
 
 ENV_STEPS=1000000
-
 RUNS=3
 
-EXP_NAME="games-video"
+EXP_NAME="games-recurrent1frame"
 rm -r ../exp/$EXP_NAME/
 mkdir ../exp/$EXP_NAME/
+echo "Effect of video detail on RL with 1 frame, RNN " > ../exp/$EXP_NAME/info.txt
 
 for ((i=0;i<${#ENV_NAMES[@]};++i));
 do
     for j in `seq 1 $RUNS`
     do
         echo "Running "${ENV_NAMES[i]}" for "$ENV_STEPS" steps. PPO with RNN run $j out of $RUNS"
-        python -W ignore ../../pytorch-a2c-ppo-acktr/main.py --stats-file "../exp/$EXP_NAME/"${ENV_NAMES[i]}"-test_$j.csv" --env-name "${ENV_NAMES[i]}" --num-env-steps $ENV_STEPS --save-dir "../exp/$EXP_NAME/trained_models/test/" --seed $(($SEED_OFFSET+j)) --algo "ppo" --log-interval 1 --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --use-linear-lr-decay --use-linear-clip-decay --entropy-coef 0.01 --extra-video # > /dev/null
+        python -W ignore ../../pytorch-a2c-ppo-acktr/main.py --stats-file "../exp/$EXP_NAME/"${ENV_NAMES[i]}"-test_$j.csv" --env-name "${ENV_NAMES[i]}" --num-env-steps $ENV_STEPS --save-dir "../exp/$EXP_NAME/trained_models/test/" --seed $(($SEED_OFFSET+j)) --algo "ppo" --log-interval 1 --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --use-linear-lr-decay --use-linear-clip-decay --entropy-coef 0.01 --recurrent-policy --extra-video # > /dev/null
         echo "Running "${ENV_NAMES[i]}" for "$ENV_STEPS" steps. PPO no detail run $j out of $RUNS"
-        python -W ignore ../../pytorch-a2c-ppo-acktr/main.py --stats-file "../exp/$EXP_NAME/"${ENV_NAMES[i]}"-base_$j.csv" --env-name "${ENV_NAMES[i]}" --num-env-steps $ENV_STEPS --save-dir "../exp/$EXP_NAME/trained_models/base/" --seed $(($SEED_OFFSET+j)) --algo "ppo" --log-interval 1 --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --use-linear-lr-decay --use-linear-clip-decay --entropy-coef 0.01 #> /dev/null
+        python -W ignore ../../pytorch-a2c-ppo-acktr/main.py --stats-file "../exp/$EXP_NAME/"${ENV_NAMES[i]}"-base_$j.csv" --env-name "${ENV_NAMES[i]}" --num-env-steps $ENV_STEPS --save-dir "../exp/$EXP_NAME/trained_models/base/" --seed $(($SEED_OFFSET+j)) --algo "ppo" --log-interval 1 --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --use-linear-lr-decay --use-linear-clip-decay --entropy-coef 0.01 --recurrent-policy #> /dev/null
     done
 done
 

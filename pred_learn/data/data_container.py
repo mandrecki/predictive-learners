@@ -85,7 +85,7 @@ class ObservationSeriesDataset(Dataset):
             sample["a0"].append(torch.Tensor([timestep["a0"]]).unsqueeze(0))
             sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
             # TODO remove item() below
-            sample["terminal"].append(torch.ByteTensor([timestep["terminal"].item()]).unsqueeze(0))
+            sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]).unsqueeze(0))
 
         for key, value in sample.items():
             sample[key] = torch.cat(value)

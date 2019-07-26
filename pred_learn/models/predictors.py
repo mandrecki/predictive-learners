@@ -82,10 +82,10 @@ class Predictor(nn.Module):
         if p == 1:
             out, belief = self.measurement_updater(obs_enc, belief)
         else:
-            out, updated_belief = self.measurement_updater(obs, belief)
+            out, updated_belief = self.measurement_updater(obs_enc, belief)
 
             mask = torch.ones(updated_belief.size(), device=obs_enc.device)
-            skip = torch.ByteTensor(np.random.rand(batch_size) < self.skip_update_p, device=obs.device)
+            skip = (torch.rand(updated_belief.size(1)) < self.skip_update_p).byte().cuda()
             mask[:, skip, ...] = 0
             belief = mask * updated_belief + (1 - mask) * belief
 
@@ -99,26 +99,23 @@ class Predictor(nn.Module):
         action_enc = self.action_encoder(action).unsqueeze(1)
         return action_enc
 
-    def get_null_action_mask(self, action):
-        # one hot discrete actions
-        if action.dim() == 2:
-            mask = torch.ones(updated_belief.size(), device=action.device)
-
     def propagate_action_conseq(self, belief, action, skip_null_action=True):
         action_enc = self.encode_action(action)
         out, updated_belief = self.action_propagator(action_enc, belief)
 
         if skip_null_action:
-            mask = torch.ones(updated_belief.size(), device=o_0.device)
-            # null_actions
-
-            skip = (a_0 == 0).view(-1).cuda().byte()
-            mask[:, skip, ...] = 0
+            # TODO different null action test depending on action space
+            skip_those = (action.view(-1) == 0).byte()
+            mask = torch.ones(updated_belief.size(), device=updated_belief.device)
+            mask[:, skip_those, ...] = 0
             belief = mask * updated_belief + (1 - mask) * belief
         else:
             belief = updated_belief
+        return out, belief
 
-
+    def propagate_env_conseq(self, belief):
+        belief = self.env_propagator(belief.squeeze(0))
+        return belief.unsqueeze(0)
 
     def predict_full(self, o_series, a_series):
         batch_size = o_series.size(0)
@@ -131,12 +128,21 @@ class Predictor(nn.Module):
             a_0 = a_series[:, t, ...]
 
             update_probability = 0.5 if t > 3 else 1
-            belief_out, belief = self.maybe_update_belief(o_0, belief, update_probability)
+            belief_out, belief = self.update_belief_maybe(o_0, belief, update_probability)  # deterministic
 
-            o_0_recon = self.decode_belief(belief_out)
+            o_0_recon = self.decode_belief(belief.view(batch_size, -1))
             o_recons.append(o_0_recon.unsqueeze(1))
 
-            belief_out, belief = self.propagate_action_conseq(belief, a_0)
+            belief_out, belief = self.propagate_action_conseq(belief, a_0)  # possibly stochastic
+            belief = self.propagate_env_conseq(belief)
+
+            o_1_pred = self.decode_belief(belief.view(batch_size, -1))
+            o_predictions.append(o_1_pred.unsqueeze(1))
+
+        o_recons = torch.cat(o_recons, dim=1)
+        o_predictions = torch.cat(o_predictions, dim=1)
+        return o_recons, o_predictions, belief
+
 
     def generate_predictions(self, o_series, a_series):
         batch_size = o_series.size(0)
@@ -188,10 +194,10 @@ class Predictor(nn.Module):
 
 
 class AE_Predictor(Predictor):
-    def __init__(self, action_dim, models={}):
+    def __init__(self, image_channels, action_dim, models={}):
         super(AE_Predictor, self).__init__()
 
-        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator
+        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator, SimpleFF
 
         self.transition_is_determininstic = True
         self.observation_is_determininstic = True
@@ -205,35 +211,17 @@ class AE_Predictor(Predictor):
         # VAE or beta-VAE or other
         self.regularisation_loss = None
 
-        self.image_encoder = models.get("image_encoder", Encoder())
+        self.image_encoder = models.get("image_encoder", Encoder(im_channels=image_channels))
         self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
-        self.image_decoder = models.get("image_decoder", Decoder())
+        self.image_decoder = models.get("image_decoder", Decoder(im_channels=image_channels))
 
         self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
         self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
 
-        self.env_propagator = models.get("state_propagator", BeliefStatePropagator())
+        self.env_propagator = models.get("state_propagator", SimpleFF())
 
-
-    def forward(self, *tensors):
-        assert 0 < len(tensors) <= 2
-
-        if len(tensors) == 1:
-            xs = tensors[0]
-            h = None
-        else:
-            xs, h = tensors
-
-        out_im = []
-        for step in range(xs.size(1)):
-            x = xs[:, step, ...]
-            z = self.image_encoder(x)
-            next_z, h = self.env_propagator(z.unsqueeze(0), h)
-            next_x = self.decoder(next_z.squeeze(0))
-            out_im.append(next_x.unsqueeze(1))
-
-        x_preds = torch.cat(out_im, dim=1)
-        return x_preds
+    def forward(self, x):
+        return None
 
 
 if __name__ == "__main__":
