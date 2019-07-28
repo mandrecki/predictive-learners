@@ -40,12 +40,13 @@ class ObservationDataset(Dataset):
     def extend(self, iterable):
         self.record.extend(iterable)
 
+    def get_channels_n(self):
+        return self.record[0]["s0"].shape[-1]
 
-class ObservationSeriesDataset(Dataset):
+
+class ObservationSeriesDataset(ObservationDataset):
     def __init__(self, filepath, action_space_n, series_length, subtract_average=False):
-        super(ObservationSeriesDataset, self).__init__()
-        self.record = torch.load(filepath)
-        self.action_space_n = action_space_n
+        super(ObservationSeriesDataset, self).__init__(filepath, action_space_n)
         self.series_length = series_length
 
         self.subtract_average = subtract_average

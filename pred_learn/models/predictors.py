@@ -99,7 +99,7 @@ class Predictor(nn.Module):
         action_enc = self.action_encoder(action).unsqueeze(1)
         return action_enc
 
-    def propagate_action_conseq(self, belief, action, skip_null_action=True):
+    def propagate_action_conseq(self, belief, action, skip_null_action=False):
         action_enc = self.encode_action(action)
         out, updated_belief = self.action_propagator(action_enc, belief)
 
@@ -127,7 +127,7 @@ class Predictor(nn.Module):
             o_0 = o_series[:, t, ...]
             a_0 = a_series[:, t, ...]
 
-            update_probability = 0.5 if t > 3 else 1
+            update_probability = 0.9 if t > 3 else 1
             belief_out, belief = self.update_belief_maybe(o_0, belief, update_probability)  # deterministic
 
             o_0_recon = self.decode_belief(belief.view(batch_size, -1))
@@ -143,51 +143,6 @@ class Predictor(nn.Module):
         o_predictions = torch.cat(o_predictions, dim=1)
         return o_recons, o_predictions, belief
 
-
-    def generate_predictions(self, o_series, a_series):
-        batch_size = o_series.size(0)
-        series_len = o_series.size(1)
-        belief = None
-        o_recons = []
-        o_predictions = []
-        for t in range(series_len):
-            o_0 = o_series[:, t, ...]
-            a_0 = a_series[:, t, ...]
-            # r_t = r_series[:, t, ...]
-
-            o_0_enc = self.image_encoder(o_0).unsqueeze(1)
-            # TODO add masking of o_t_enc (skip for initial ts)
-            if t < 3:
-                out, belief = self.measurement_updater(o_0_enc, belief)
-            else:
-                out, updated_belief = self.measurement_updater(o_0_enc, belief)
-
-                mask = torch.ones(updated_belief.size(), device=o_0.device)
-                skip = torch.ByteTensor(np.random.rand(batch_size) < self.skip_update_p).cuda()
-                mask[:, skip, ...] = 0
-                belief = mask * updated_belief + (1 - mask) * belief
-
-            o_recon = self.image_decoder(out)
-            o_recons.append(o_recon.unsqueeze(1))
-
-            a_0_enc = self.action_encoder(a_0).unsqueeze(1)
-            out, updated_belief = self.action_propagator(a_0_enc, belief)
-            # TODO add masking of null actions
-            if self.skip_null_action:
-                mask = torch.ones(updated_belief.size(), device=o_0.device)
-                skip = (a_0 == 0).view(-1).cuda().byte()
-                mask[:, skip, ...] = 0
-                belief = mask * updated_belief + (1 - mask) * belief
-            else:
-                belief = updated_belief
-
-            out, belief = self.env_propagator(out, belief)
-            o_prediction = self.image_decoder(out)
-            o_predictions.append(o_prediction.unsqueeze(1))
-
-        o_recons = torch.cat(o_recons, dim=1)
-        o_predictions = torch.cat(o_predictions, dim=1)
-        return o_recons, o_predictions
 
     def forward(self, *tensors):
         raise NotImplemented

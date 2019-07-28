@@ -18,36 +18,17 @@ from pred_learn.envs.envs import make_rl_envs
 from pred_learn.envs.envs import RL_SIZE, CHANNELS
 
 
-P_NO_ACTION = 0.05
-
-class ObsBuffer:
-    def __init__(self, max_len=4, channels=CHANNELS):
-        self.max_len = max_len
-        self.channels = channels
-        self.buffer = np.zeros((1, self.max_len * self.channels, RL_SIZE, RL_SIZE))
-
-    def reset(self):
-        self.buffer[:] = 0
-
-    def add_obs(self, observation):
-        self.buffer[:, :-self.channels, ...] = self.buffer[:, self.channels:, ...]
-        self.buffer[:, -self.channels:, ...] = observation.transpose([2, 0, 1])
-        # self.buffer = np.roll(self.buffer, -self.channels, axis=1)
-        # self.buffer[0, -self.channels:, ...] = observation.transpose([2, 0, 1])
-        # self.buffer = np.roll(self.buffer, self.channels, axis=1)
-        # self.buffer[0, 0:self.channels, ...] = observation.transpose([2, 0, 1])
-
-    def get_tensor(self):
-        return torch.Tensor(self.buffer)
-
+P_NO_ACTION = 0.0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Gym recorder')
     parser.add_argument('--env-id', default='Pong-ple-v0',
                         help='env to record (see list in env_configs.py')
     parser.add_argument('--file-appendix', default="0", type=str)
+    parser.add_argument('--n-envs', default=1, type=int)
     parser.add_argument('--rl-model-path', default=None, help='rl model to load for action selection')
     parser.add_argument('--render', default=False, action='store_true', help='render or not')
+    parser.add_argument('--no-record', default=False, action='store_true', help='do not save records')
     parser.add_argument('--extra-video', default=False, action='store_true', help='env with extra detail?')
     parser.add_argument('--extra-image', default=False, action='store_true', help='env with extra detail?')
     parser.add_argument('--video-path', default="../clean_records/test_vid.torch", help='path to ordered images')
@@ -68,7 +49,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     frame_stack = 1 if args.recurrent_policy else 4
     # device = "cpu"
-    envs = make_rl_envs(args.env_id, seed=np.random.randint(0, 10000), n_envs=1,
+    envs = make_rl_envs(args.env_id, seed=np.random.randint(0, 10000), n_envs=args.n_envs,
                         device=device,
                         frame_stack=frame_stack,
                         add_video=args.extra_video, add_frames=args.extra_image,
@@ -94,6 +75,10 @@ if __name__ == "__main__":
         from pyvirtualdisplay import Display
         display = Display(visible=0, size=(600, 500))
         display.start()
+    else:
+        plt.figure(1)
+        mng = plt.get_current_fig_manager()
+        mng.resize(*mng.window.maxsize())
 
     while len(record) < args.total_steps:
         obs = envs.reset()
@@ -135,7 +120,8 @@ if __name__ == "__main__":
             timestep["s1"] = np.copy(im)
             timestep["r1"] = rew[0, ...].cpu().numpy()
             timestep["terminal"] = done[0, ...].item()
-            record.append(timestep)
+            if not args.no_record:
+                record.append(timestep)
 
             # if args.render:
             #     print("Action:", action)
@@ -145,5 +131,6 @@ if __name__ == "__main__":
                 break
 
     envs.close()
-    torch.save(record, record_path)
-    states2video(record, video_path)
+    if not args.no_record:
+        torch.save(record, record_path)
+        states2video(record, video_path)

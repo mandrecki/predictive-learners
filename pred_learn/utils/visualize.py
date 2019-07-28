@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from cv2 import VideoWriter, VideoWriter_fourcc
 
 
@@ -21,6 +22,12 @@ def states2video(record, filepath="0.avi"):
 
     video.release()
 
+def visual_torch2numpy(torchim):
+    """Tranpose channels to numpy convention (channel last)
+    :param torchim: torch tensor (a, b, c, ...), C, H, W -> (a, b, c, ...), H, W, C
+    """
+    numpyim = torchim.tra
+
 
 def stack2wideim(tensor):
     """ Converts stack of torch features to viewable image.
@@ -40,21 +47,39 @@ def stack2wideim(tensor):
     return im_display
 
 
-def series2wideim(tensor):
+def series2wideim(series, return_numpy=False, skip_detail=True):
     """Converts a series or batch of series of images to viewable image.
 
-    :param tensor: batch_size, series_len, channels, h, w
+    :param series: batch_size, series_len, channels, h, w
     :return:
     """
-    assert tensor.dim() == 5
-    # colour channel last
-    x = tensor.cpu().numpy().transpose([0, 1, 3, 4, 2])
-    n_splits = x.shape[-1]//3
-    ims_y = []
-    for i in range(x.shape[0]):
-        im_x = np.dstack(np.split(x[i, ...], n_splits, axis=-1))
-        im_x = np.dstack(np.split(im_x, im_x.shape[0], axis=0))
-        ims_y.append(im_x)
+    # if batch given
+    if series.dim() == 5:
+        series = torch.cat([ser for ser in series], dim=-2)
 
-    im_display = np.hstack(ims_y).squeeze(0)
-    return im_display
+    assert series.dim() == 4
+    wide_im = torch.cat([t for t in series], dim=-1)
+
+    if wide_im.size(-3) > 3:
+        assert wide_im.size(-3) % 3 == 0
+        if skip_detail:
+            wide_im = wide_im[:3, ...]
+        else:
+            wide_im = torch.cat(torch.split(wide_im, 3, dim=-3), dim=-1)
+
+    if return_numpy:
+        wide_im = wide_im.detach().cpu().numpy().transpose([1, 2, 0])
+
+    return wide_im
+
+    # colour channel last
+    # x = series.cpu().numpy().transpose([0, 1, 3, 4, 2])
+    # n_splits = x.shape[-1]//3
+    # ims_y = []
+    # for i in range(x.shape[0]):
+    #     im_x = np.dstack(np.split(x[i, ...], n_splits, axis=-1))
+    #     im_x = np.dstack(np.split(im_x, im_x.shape[0], axis=0))
+    #     ims_y.append(im_x)
+    #
+    # im_display = np.hstack(ims_y).squeeze(0)
+    # return im_display

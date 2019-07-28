@@ -8,7 +8,7 @@ from torch import nn
 IM_CHANNELS = 3
 # IM_WIDTH = 64
 
-V_SIZE = 64
+V_SIZE = 256
 BS_SIZE = V_SIZE
 # N_SIZE = 256
 # D_SIZE = 64
