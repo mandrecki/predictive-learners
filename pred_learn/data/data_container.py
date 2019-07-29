@@ -28,8 +28,8 @@ class ObservationDataset(Dataset):
             action[timestep["a0"]] = 1
 
         sample = {
-            "s0": torch.FloatTensor(timestep["s0"]/255).permute([2, 0, 1]),
-            "s1": torch.FloatTensor(timestep["s1"]/255).permute([2, 0, 1]),
+            "s0": torch.FloatTensor(timestep["s0"]).permute([2, 0, 1]),
+            "s1": torch.FloatTensor(timestep["s1"]).permute([2, 0, 1]),
             "a0": torch.LongTensor(action),
             "r1": torch.FloatTensor([timestep["r1"]]),
             "terminal": torch.ByteTensor([timestep["terminal"]]),

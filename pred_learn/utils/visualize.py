@@ -50,7 +50,7 @@ def stack2wideim(tensor):
 def series2wideim(series, return_numpy=False, skip_detail=True):
     """Converts a series or batch of series of images to viewable image.
 
-    :param series: batch_size, series_len, channels, h, w
+    :param series: batch_size, series_len (optional), channels, h, w
     :return:
     """
     # if batch given
