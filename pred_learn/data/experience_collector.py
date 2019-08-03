@@ -100,6 +100,7 @@ if __name__ == "__main__":
                         plt.clf()
                         im_display = stack2wideim(obs)
                         plt.imshow(im_display)
+                        envs.render()
                         plt.pause(0.05)
 
             else:
@@ -120,8 +121,9 @@ if __name__ == "__main__":
             timestep["s1"] = np.copy(im)
             timestep["r1"] = rew[0, ...].cpu().numpy()
             timestep["terminal"] = done[0, ...].item()
-            if not args.no_record:
-                record.append(timestep)
+            record.append(timestep)
+            # if not args.no_record:
+            #     pass
 
             # if args.render:
             #     print("Action:", action)

@@ -38,6 +38,7 @@ from baselines import bench
 
 import gym
 import gym_tetris
+import gym_sokoban
 from gym_tetris.actions import SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 import gym_ple
@@ -55,6 +56,7 @@ GAME_ENVS = [
     "CubeCrash-v0",
     "Catcher-ple-v0",
     "Pong-ple-v0",
+    "Sokoban-v0",
 ]
 
 GAME_ENVS_ACTION_REPEATS = {
@@ -232,8 +234,6 @@ class GameEnv(AbstractEnv):
         reward = 0
         for k in range(self.action_repeat):
             observation, reward_k, done, info = self._env.step(action)
-            # image = self._env.render(mode="rgb_array")
-            # observation = cv2.resize(image, (64, 64), interpolation=cv2.INTER_LINEAR)
             reward += reward_k
             self.ep_reward += reward_k
             self.t += 1  # Increment internal timer
@@ -286,7 +286,7 @@ class GymEnv(AbstractEnv):
                 break
         return observation, reward, done, info
 
-    def render(self):
+    def render(self, mode='human'):
         self._env.render()
 
     def close(self):
@@ -338,7 +338,7 @@ class ControlSuiteEnv(AbstractEnv):
                 break
         return observation, reward, done, info
 
-    def render(self):
+    def render(self, mode='human'):
         cv2.imshow("screen", self._env.physics.render(camera_id=0)[:, :, ::-1])
         cv2.waitKey(1)
 

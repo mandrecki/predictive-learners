@@ -9,19 +9,12 @@ SEED_OFFSET=0
 # deepmind suite
 #ENV_NAMES=(  "cartpole-balance"   "reacher-easy" "ball_in_cup-catch" "finger-spin" "cheetah-run" )
 
-#ENV_NAMES=( "Catcher-ple-v0"  )
-#ENV_NAMES=( "cheetah-run" "Ant-v0" "CarRacing-v0" "CartPole-v1" )
-#ENV_NAMES=( "Ant-v2" "CarRacing-v0" "CartPole-v0" )
-#ENV_NAMES=( "PixelCopter-ple-v0"  "MountainCar-v0"  )
-#ENV_NAMES=( "WaterWorld-ple-v0" )
-#ENV_NAMES=( "CartPole-v0" )
-#ENV_NAMES=( "TetrisA-v2" )
-ENV_NAMES=( "CarRacing-v0" )
+ENV_NAMES=( "Sokoban-v0" )
 
 ENV_STEPS=1000000
 RUNS=3
 
-EXP_NAME="car-rnn1frame-video"
+EXP_NAME="sokoban-video"
 rm -r ../exp/$EXP_NAME/
 mkdir ../exp/$EXP_NAME/
 echo "Effect of random video detail on RL with 1 frame, RNN " > ../exp/$EXP_NAME/info.txt
