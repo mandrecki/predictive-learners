@@ -43,21 +43,39 @@ import numpy as np
 import torch.nn.functional as F
 
 
+def gaussian_likelihood(target, mu, sigma):
+    return 1/sigma**2 * torch.exp(-(target - mu)**2/sigma**2)
+
+def gaussian_log_likelihood(target, mu, sigma):
+    return -torch.log(sigma**2) - (target - mu)**2/sigma**2
+
+def gaussian_nll_loss(target, mu, sigma):
+    return torch.mean(-gaussian_log_likelihood(target, mu, sigma))
+
+def guassian_mix_ll(target, mu, sigma, pi):
+    pi_ps = torch.softmax(pi, dim=-1)
+    gaussian_log_ps = gaussian_log_likelihood(target.unsqueeze(-1), mu, sigma)
+    max_gaussian_log_ps = gaussian_log_ps.max(dim=-1)[0]
+    mix_ps = pi_ps * torch.exp(gaussian_log_ps - max_gaussian_log_ps.unsqueeze(-1))
+    mix_log_ps = torch.log(torch.sum(mix_ps, dim=-1)) + 2 * max_gaussian_log_ps
+    mix_neg_log_loss = torch.mean(-mix_log_ps)
+    return mix_neg_log_loss
+
 class Predictor(nn.Module):
     """
     Abstract class.
     """
     def __init__(self, **models):
         super(Predictor, self).__init__()
-        self.encoding_is_deterministic = None
-        self.decoding_is_deterministic = None
-        self.transition_is_determininstic = None
+        self.stateful = False
 
+        self.transition_is_determininstic = None
+        self.observation_is_determininstic = None
+        self.reward_is_determininstic = None
         self.action_space = None
 
-        self.initial_observations = None
-        self.measurement_update_probability = None
-        self.skip_null_action = None
+        self.update_probability = 0.0
+        self.skip_null_action = False
 
         self.image_encoder = models.get("image_encoder", None)
         self.action_encoder = models.get("action_encoder", None)
@@ -67,54 +85,140 @@ class Predictor(nn.Module):
         self.action_propagator = models.get("action_propagator", None)
         self.env_propagator = models.get("env_propagator", None)
 
-from .vae_wm import Encoder_WM, Decoder_WM, MDRNN
-class VAE_MDN(nn.Module):
-    def __init__(self, image_channels, action_space, latent_size=64, n_gaussians=5, models={}):
+    def reconstruction_loss(self, prediction, target):
+        raise NotImplemented
+
+    def regularisation_loss(self, x):
+        raise NotImplemented
+
+    def encode_obs(self, obs):
+        obs_enc = self.image_encoder(obs).unsqueeze(1)
+        return obs_enc
+
+    def update_belief_maybe(self, obs, belief, p=1):
+        assert 0 <= p <= 1
+        if belief is None:
+            assert p == 1
+
+        obs_enc = self.encode_obs(obs)
+        if p == 1:
+            out, belief = self.measurement_updater(obs_enc, belief)
+        else:
+            out, updated_belief = self.measurement_updater(obs_enc, belief)
+
+            mask = torch.ones(updated_belief.size(), device=obs_enc.device)
+            skip = (torch.rand(updated_belief.size(1)) < self.update_probability).byte().cuda()
+            mask[:, skip, ...] = 0
+            belief = mask * updated_belief + (1 - mask) * belief
+
+        return out, belief
+
+    def decode_belief(self, belief):
+        obs_recon = self.image_decoder(belief)
+        return obs_recon
+
+    def encode_action(self, action):
+        action_enc = self.action_encoder(action).unsqueeze(1)
+        return action_enc
+
+    def propagate_action_conseq(self, belief, action, skip_null_action=False):
+        action_enc = self.encode_action(action)
+        out, updated_belief = self.action_propagator(action_enc, belief)
+
+        if skip_null_action:
+            # TODO different null action test depending on action space
+            skip_those = (action.view(-1) == 0).byte()
+            mask = torch.ones(updated_belief.size(), device=updated_belief.device)
+            mask[:, skip_those, ...] = 0
+            belief = mask * updated_belief + (1 - mask) * belief
+        else:
+            belief = updated_belief
+        return out, belief
+
+    def propagate_env_conseq(self, belief):
+        belief = self.env_propagator(belief.squeeze(0))
+        return belief.unsqueeze(0)
+
+    def predict_full(self, o_series, a_series):
+        batch_size = o_series.size(0)
+        series_len = o_series.size(1)
+        belief = None
+        o_recons = []
+        o_predictions = []
+        for t in range(series_len):
+            o_0 = o_series[:, t, ...]
+            a_0 = a_series[:, t, ...]
+
+            update_probability = self.update_probability if t > 3 else 1
+            belief_out, belief = self.update_belief_maybe(o_0, belief, update_probability)  # deterministic
+
+            # o_0_recon = self.decode_belief(belief.view(batch_size, -1))
+            # o_recons.append(o_0_recon.unsqueeze(1))
+
+            belief_out, belief = self.propagate_action_conseq(belief, a_0, self.skip_null_action)  # possibly stochastic
+            if self.skip_null_action:
+                belief = self.propagate_env_conseq(belief)
+
+            o_1_pred = self.decode_belief(belief.view(batch_size, -1))
+            o_predictions.append(o_1_pred.unsqueeze(1))
+
+        o_recons = torch.cat(o_recons, dim=1)
+        o_predictions = torch.cat(o_predictions, dim=1)
+        return o_recons, o_predictions, belief
+
+
+
+
+class VAE_MDN(Predictor):
+    def __init__(self, image_channels, action_size, latent_size=64, models={}):
         super(VAE_MDN, self).__init__()
-
-        self.encoding_is_deterministic = False
-        self.decoding_is_deterministic = True
-        self.transition_is_determininstic = False
-
-        self.action_space = action_space
-
-        self.initial_observations = 5
-        self.update_probability = 1.0
-        self.skip_null_action = False
-
+        # self.update_probability = 0.0
+        # self.skip_null_action = False
         self.latent_size = latent_size
-        self.action_size = action_space.n
+        self.action_size = action_size
         self.image_channels = image_channels
-        self.n_gaussians = n_gaussians
+
+        from .vae_wm import Encoder_WM, Decoder_WM, MDRNN
 
         self.image_encoder = models.get("image_encoder", Encoder_WM(image_channels, latent_size))
-        # TODO convert action to dim=1 continuous
-        # self.action_encoder = models.get("action_encoder", None)
+        self.action_encoder = models.get("action_encoder", None)
         self.image_decoder = models.get("image_decoder", Decoder_WM(image_channels, latent_size))
-        # self.reward_decoder = models.get("reward_decoder", None)
-        # self.measurement_updater = models.get("measurement_updater", None)
-        self.action_propagator = models.get("action_propagator", MDRNN(latent_size, self.action_size, latent_size, n_gaussians))
+        self.reward_decoder = models.get("reward_decoder", None)
+        self.measurement_updater = models.get("measurement_updater", None)
+        self.action_propagator = models.get("action_propagator", MDRNN(latent_size, action_size, latent_size, 5))
         # self.env_propagator = models.get("env_propagator", None)
 
     def reconstruct_unordered(self, obs):
-        z, mu, logsigma = self.image_encoder(obs)
+        mu, logsigma = self.image_encoder(obs)
+        sigma = logsigma.exp()
+        eps = torch.randn_like(sigma)
+        z = eps.mul(sigma).add_(mu)
+
         recon_x = self.image_decoder(z)
         return recon_x, mu, logsigma
 
-    # def get_vae_loss(self, obs):
-
-
     def to_latent(self, obs, next_obs):
+        """ Transform observations to latent space.
+        :args obs: 5D torch tensor (BSIZE, SEQ_LEN, ASIZE, SIZE, SIZE)
+        :args next_obs: 5D torch tensor (BSIZE, SEQ_LEN, ASIZE, SIZE, SIZE)
+        :returns: (latent_obs, latent_next_obs)
+            - latent_obs: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
+            - next_latent_obs: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
+        """
         batch_size = obs.size()[0]
         series_len = obs.size()[1]
         with torch.no_grad():
             obs, next_obs = [
                 x.view(-1, self.image_channels, 64, 64) for x in (obs, next_obs)]
 
-            (obs_z, obs_mu, obs_logsigma), (next_obs_z, next_obs_mu, next_obs_logsigma) = [
+            (obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma) = [
                 self.image_encoder(x) for x in (obs, next_obs)]
 
-        return obs_z.view(batch_size, series_len, self.latent_size), next_obs_z.view(batch_size, series_len, self.latent_size)
+            latent_obs, latent_next_obs = [
+                (x_mu + x_logsigma.exp() * torch.randn_like(x_mu)).view(batch_size, series_len, self.latent_size)
+                for x_mu, x_logsigma in
+                [(obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma)]]
+        return latent_obs, latent_next_obs
 
     def get_loss(self, latent_obs, action, reward, terminal,
                  latent_next_obs, include_reward: bool):
@@ -243,8 +347,48 @@ class VAE_MDN(nn.Module):
             return - torch.mean(log_prob)
         return - log_prob
 
+class AE_Predictor(Predictor):
+    def __init__(self, image_channels, action_dim, models={}):
+        super(AE_Predictor, self).__init__()
 
+        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator, SimpleFF
+
+        self.transition_is_determininstic = True
+        self.observation_is_determininstic = True
+        self.reward_is_determininstic = True
+
+        self.skip_update_p = 0.5
+        self.skip_null_action = True
+
+        # mse or likelihood
+        self.recon_loss = None
+        # VAE or beta-VAE or other
+        self.regularisation_loss = None
+
+        self.image_encoder = models.get("image_encoder", Encoder(im_channels=image_channels))
+        self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
+        self.image_decoder = models.get("image_decoder", Decoder(im_channels=image_channels))
+
+        self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
+        self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
+
+        self.env_propagator = models.get("state_propagator", SimpleFF())
+
+    def forward(self, x):
+        return None
 
 
 if __name__ == "__main__":
-    pass
+    import torch
+
+    batch_size = 4
+    series_len = 10
+    h, w, c = 64, 64, 3
+
+    image = torch.rand(batch_size, series_len, c, h, w)
+    print(image.size())
+
+    for predictor in [AE_Predictor]:
+        p = predictor()
+        print("prediction for ", predictor)
+        print(p(image.size()))

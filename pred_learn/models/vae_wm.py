@@ -20,10 +20,10 @@ def loss_function(recon_x, x, mu, logsigma):
     return MSE + KLD
 
 
-class Decoder(nn.Module):
+class Decoder_WM(nn.Module):
     """ VAE decoder """
     def __init__(self, img_channels, latent_size):
-        super(Decoder, self).__init__()
+        super(Decoder_WM, self).__init__()
         self.latent_size = latent_size
         self.img_channels = img_channels
 
@@ -43,10 +43,10 @@ class Decoder(nn.Module):
         return reconstruction
 
 
-class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
+class Encoder_WM(nn.Module): # pylint: disable=too-many-instance-attributes
     """ VAE encoder """
     def __init__(self, img_channels, latent_size):
-        super(Encoder, self).__init__()
+        super(Encoder_WM, self).__init__()
         self.latent_size = latent_size
         #self.img_size = img_size
         self.img_channels = img_channels
@@ -69,15 +69,19 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         mu = self.fc_mu(x)
         logsigma = self.fc_logsigma(x)
 
-        return mu, logsigma
+        sigma = logsigma.exp()
+        eps = torch.randn_like(sigma)
+        z = eps.mul(sigma).add_(mu)
+
+        return z, mu, logsigma
 
 
 class VAE(nn.Module):
     """ Variational Autoencoder """
     def __init__(self, img_channels, latent_size):
         super(VAE, self).__init__()
-        self.encoder = Encoder(img_channels, latent_size)
-        self.decoder = Decoder(img_channels, latent_size)
+        self.encoder = Encoder_WM(img_channels, latent_size)
+        self.decoder = Decoder_WM(img_channels, latent_size)
 
     def forward(self, x): # pylint: disable=arguments-differ
         mu, logsigma = self.encoder(x)

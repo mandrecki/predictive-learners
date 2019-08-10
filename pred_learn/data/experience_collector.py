@@ -18,7 +18,7 @@ from pred_learn.envs.envs import make_rl_envs
 from pred_learn.envs.envs import RL_SIZE, CHANNELS
 
 
-P_NO_ACTION = 0.0
+P_NO_ACTION = 0.02
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Gym recorder')
@@ -132,7 +132,8 @@ if __name__ == "__main__":
             if done[0, ...]:
                 break
 
-    envs.close()
     if not args.no_record:
         torch.save(record, record_path)
         states2video(record, video_path)
+
+    envs.close()

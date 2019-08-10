@@ -210,6 +210,7 @@ class GameEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
         super(GameEnv, self).__init__()
         extra_args = ENV_GAMES_ARGS.get(env_id, {})
+        self.env_id = env_id
         if env_id == "TetrisA-v2":
             # TODO resize and crop observation
             self._env = JoypadSpace(gym_tetris.make(env_id, **extra_args), SIMPLE_MOVEMENT)
@@ -256,7 +257,10 @@ class GameEnv(AbstractEnv):
 
     @property
     def action_size(self):
-        return self._env.action_space.n
+        if self.env_id == "CarRacing-v0":
+            return self.action_space.shape[0]
+        else:
+            return self._env.action_space.n
 
 class GymEnv(AbstractEnv):
     def __init__(self, env_id, seed, max_episode_length=1000):
