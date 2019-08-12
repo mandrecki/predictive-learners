@@ -178,11 +178,11 @@ class VAE_MDN(Predictor):
         self.action_size = action_size
         self.image_channels = image_channels
 
-        from .vae_wm import Encoder_WM, Decoder_WM, MDRNN
+        from .vae_wm import Encoder, Decoder, MDRNN
 
-        self.image_encoder = models.get("image_encoder", Encoder_WM(image_channels, latent_size))
+        self.image_encoder = models.get("image_encoder", Encoder(image_channels, latent_size))
         self.action_encoder = models.get("action_encoder", None)
-        self.image_decoder = models.get("image_decoder", Decoder_WM(image_channels, latent_size))
+        self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
         self.reward_decoder = models.get("reward_decoder", None)
         self.measurement_updater = models.get("measurement_updater", None)
         self.action_propagator = models.get("action_propagator", MDRNN(latent_size, action_size, latent_size, 5))
@@ -351,7 +351,7 @@ class AE_Predictor(Predictor):
     def __init__(self, image_channels, action_dim, models={}):
         super(AE_Predictor, self).__init__()
 
-        from pred_learn.models.ae import Encoder, ActionEncoder, Decoder, BeliefStatePropagator, SimpleFF
+        from pred_learn.models.simple_models import Encoder, ActionEncoder, Decoder, StatePropagator, SigmoidFF
 
         self.transition_is_determininstic = True
         self.observation_is_determininstic = True
@@ -369,10 +369,10 @@ class AE_Predictor(Predictor):
         self.action_encoder = models.get("action_encoder", ActionEncoder(action_dim))
         self.image_decoder = models.get("image_decoder", Decoder(im_channels=image_channels))
 
-        self.measurement_updater = models.get("measurement_updater", BeliefStatePropagator())
-        self.action_propagator = models.get("action_propagator", BeliefStatePropagator())
+        self.measurement_updater = models.get("measurement_updater", StatePropagator())
+        self.action_propagator = models.get("action_propagator", StatePropagator())
 
-        self.env_propagator = models.get("state_propagator", SimpleFF())
+        self.env_propagator = models.get("state_propagator", SigmoidFF())
 
     def forward(self, x):
         return None

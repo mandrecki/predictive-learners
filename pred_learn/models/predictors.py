@@ -42,6 +42,11 @@ from torch import nn
 import numpy as np
 import torch.nn.functional as F
 
+from .losses import normal_KL_div, gaussian_mix_nll
+from .simple_models import StatePropagator, ActionStatePropagator, SigmoidFF
+
+from .vae_wm import Encoder, Decoder, MixtureDensityNet
+
 
 class Predictor(nn.Module):
     """
@@ -67,7 +72,7 @@ class Predictor(nn.Module):
         self.action_propagator = models.get("action_propagator", None)
         self.env_propagator = models.get("env_propagator", None)
 
-from .vae_wm import Encoder_WM, Decoder_WM, MDRNN
+
 class VAE_MDN(nn.Module):
     def __init__(self, image_channels, action_space, latent_size=64, n_gaussians=5, models={}):
         super(VAE_MDN, self).__init__()
@@ -83,167 +88,79 @@ class VAE_MDN(nn.Module):
         self.skip_null_action = False
 
         self.latent_size = latent_size
-        self.action_size = action_space.n
+        self.action_size = action_space
         self.image_channels = image_channels
         self.n_gaussians = n_gaussians
 
-        self.image_encoder = models.get("image_encoder", Encoder_WM(image_channels, latent_size))
+        self.image_encoder = models.get("image_encoder", Encoder(image_channels, latent_size, deterministic=self.encoding_is_deterministic))
         # TODO convert action to dim=1 continuous
         # self.action_encoder = models.get("action_encoder", None)
-        self.image_decoder = models.get("image_decoder", Decoder_WM(image_channels, latent_size))
-        # self.reward_decoder = models.get("reward_decoder", None)
+        self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
+        self.reward_decoder = models.get("reward_decoder",  nn.Linear(latent_size, 1))
+        self.done_decoder = models.get("done_decoder",  SigmoidFF)
         # self.measurement_updater = models.get("measurement_updater", None)
-        self.action_propagator = models.get("action_propagator", MDRNN(latent_size, self.action_size, latent_size, n_gaussians))
-        # self.env_propagator = models.get("env_propagator", None)
+        self.action_propagator = models.get("action_propagator", ActionStatePropagator(latent_size, latent_size, self.action_size))
+        self.env_propagator = models.get("env_propagator", MixtureDensityNet(latent_size, latent_size, n_gaussians))
 
     def reconstruct_unordered(self, obs):
         z, mu, logsigma = self.image_encoder(obs)
         recon_x = self.image_decoder(z)
         return recon_x, mu, logsigma
 
-    # def get_vae_loss(self, obs):
+    def get_vae_loss(self, recon_obs, obs_in, mu, logsigma):
+        # TODO use averages or full?
+        # reconstruction:
+        # squared error loss per pixel per channel
+        recon_loss = F.mse_loss(recon_obs, obs_in, size_average=False)
 
+        # alternatively likelihood loss
+        # TODO add likelihood function
 
-    def to_latent(self, obs, next_obs):
-        batch_size = obs.size()[0]
-        series_len = obs.size()[1]
-        with torch.no_grad():
-            obs, next_obs = [
-                x.view(-1, self.image_channels, 64, 64) for x in (obs, next_obs)]
+        # variational loss per dimension of latent code
+        KLD = normal_KL_div(mu, logsigma)
+        total_loss = KLD + recon_loss
+        return dict(reconstruction=recon_loss, variational=KLD, total=total_loss)
 
-            (obs_z, obs_mu, obs_logsigma), (next_obs_z, next_obs_mu, next_obs_logsigma) = [
-                self.image_encoder(x) for x in (obs, next_obs)]
-
-        return obs_z.view(batch_size, series_len, self.latent_size), next_obs_z.view(batch_size, series_len, self.latent_size)
-
-    def get_loss(self, latent_obs, action, reward, terminal,
-                 latent_next_obs, include_reward: bool):
-        """ Compute losses.
-        The loss that is computed is:
-        (GMMLoss(latent_next_obs, GMMPredicted) + MSE(reward, predicted_reward) +
-             BCE(terminal, logit_terminal)) / (LSIZE + 2)
-        The LSIZE + 2 factor is here to counteract the fact that the GMMLoss scales
-        approximately linearily with LSIZE. All losses are averaged both on the
-        batch and the sequence dimensions (the two first dimensions).
-        :args latent_obs: (BSIZE, SEQ_LEN, LSIZE) torch tensor
-        :args action: (BSIZE, SEQ_LEN, ASIZE) torch tensor
-        :args reward: (BSIZE, SEQ_LEN) torch tensor
-        :args latent_next_obs: (BSIZE, SEQ_LEN, LSIZE) torch tensor
-        :returns: dictionary of losses, containing the gmm, the mse, the bce and
-            the averaged loss.
-        """
-        batch_size = latent_obs.size()[0]
-        series_len = latent_obs.size()[1]
-        latent_obs, action, \
-        reward, terminal, \
-        latent_next_obs = [arr.transpose(1, 0)
-                           for arr in [latent_obs, action,
-                                       reward, terminal,
-                                       latent_next_obs]]
-        mus, sigmas, logpi, rs, ds = self.action_propagator(action, latent_obs)
-        gmm = self.gmm_loss(latent_next_obs, mus, sigmas, logpi)
-        bce = F.binary_cross_entropy_with_logits(ds, terminal.squeeze(-1))
-        if include_reward:
-            mse = F.mse_loss(rs, reward)
-            scale = series_len + 2
-        else:
-            mse = 0
-            scale = series_len + 1
-        loss = (gmm + bce + mse) / scale
-        return dict(gmm=gmm, bce=bce, mse=mse, loss=loss)
-
-    def predict_series(self, o_series, a_series):
+    def get_latents_loss(self, o_series, o_next_series, a_series, return_recons=False):
         batch_size = o_series.size(0)
         series_len = o_series.size(1)
 
-        # get latents (vectorised)
-        # o_series = o_series.view(-1, o_series.size()[2:])
-        # latents = self.image_encoder(o_series).view(batch_size, series_len, -1)
-        # mus, sigmas, logpi, rs, ds = self.action_propagator(latents, a_series)
-
-        belief = None
+        memory = None
         o_enc_preds = []
         # o_recons = []
         o_predictions = []
         r_predictions = []
         done_predictions = []
-        other = {
-            'vae_mus': [],
-            'vae_logsigmas': []
-
-        }
+        latent_loss = None
         for t in range(series_len):
             o_0 = o_series[:, t, ...]
-            a_0 = a_series[:, t, ...]
+            o_1 = o_next_series[:, t, ...]
+            a_0 = a_series[:, t, ...].squeeze()
 
-            mu, logsigma = self.image_encoder(o_0)
-            o_0_enc = torch.randn_like(logsigma.exp()).add(mu)
-            mu, logsigma = self.image_encoder(o_1)
-            o_0_enc = torch.randn_like(logsigma.exp()).add(mu)
-
-
-            mus, sigmas, logpi, rs, ds = self.propagate_all(belief, a_0, o_0_enc)  # possibly stochastic
-
-            o_1_pred = self.decode_belief(belief.view(batch_size, -1))
-            o_predictions.append(o_1_pred.unsqueeze(1))
-
-        o_recons = torch.cat(o_recons, dim=1)
-        o_predictions = torch.cat(o_predictions, dim=1)
-        # return o_recons, o_predictions, belief
-
-        return o_enc_preds,
-
-    def loss(self, recon, target, mu, logsigma):
-        MSE = F.mse_loss(recon, target, size_average=False)
-
-        KLD = -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
-        return MSE + KLD
-
-    def get_vae_loss(self, obs_in, compute_gradients=True):
-        if compute_gradients:
-            obs_recon, mu, logsigma = self.reconstruct_unordered(obs_in)
-            loss = self.loss(obs_recon, obs_in, mu, logsigma)
-        else:
             with torch.no_grad():
-                obs_recon, mu, logsigma = self.reconstruct_unordered(obs_in)
-                loss = self.loss(obs_recon, obs_in, mu, logsigma)
-        return loss
+                o_0_enc, _, _ = self.image_encoder(o_0)
+                o_1_enc, _, _ = self.image_encoder(o_1)
 
-    def gmm_loss(self, batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many-arguments
-        """ Computes the gmm loss.
-        Compute minus the log probability of batch under the GMM model described
-        by mus, sigmas, pi. Precisely, with bs1, bs2, ... the sizes of the batch
-        dimensions (several batch dimension are useful when you have both a batch
-        axis and a time step axis), gs the number of mixtures and fs the number of
-        features.
-        :args batch: (bs1, bs2, *, fs) torch tensor
-        :args mus: (bs1, bs2, *, gs, fs) torch tensor
-        :args sigmas: (bs1, bs2, *, gs, fs) torch tensor
-        :args logpi: (bs1, bs2, *, gs) torch tensor
-        :args reduce: if not reduce, the mean in the following formula is ommited
-        :returns:
-        loss(batch) = - mean_{i1=0..bs1, i2=0..bs2, ...} log(
-            sum_{k=1..gs} pi[i1, i2, ..., k] * N(
-                batch[i1, i2, ..., :] | mus[i1, i2, ..., k, :], sigmas[i1, i2, ..., k, :]))
-        NOTE: The loss is not reduced along the feature dimension (i.e. it should scale ~linearily
-        with fs).
-        """
-        batch = batch.unsqueeze(-2)
-        normal_dist = torch.distributions.normal.Normal(mus, sigmas)
-        g_log_probs = normal_dist.log_prob(batch)
-        g_log_probs = logpi + torch.sum(g_log_probs, dim=-1)
-        max_log_probs = torch.max(g_log_probs, dim=-1, keepdim=True)[0]
-        g_log_probs = g_log_probs - max_log_probs
+            belief, memory = self.action_propagator(a_0, o_0_enc, memory)
+            z_mu, z_sigma, z_logpi = self.env_propagator(belief)
 
-        g_probs = torch.exp(g_log_probs)
-        probs = torch.sum(g_probs, dim=-1)
+            if latent_loss is None:
+                latent_loss = gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi)
+            else:
+                latent_loss += gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi)
 
-        log_prob = max_log_probs.squeeze() + torch.log(probs)
-        if reduce:
-            return - torch.mean(log_prob)
-        return - log_prob
+            if return_recons:
+                with torch.no_grad():
+                    z_next = self.env_propagator.get_sample(z_logpi, z_mu, z_sigma)
+                    o_pred = self.image_decoder(z_next)
+                    o_predictions.append(o_pred)
 
-
+        latent_loss /= series_len
+        total_loss = latent_loss
+        losses = dict(latent_nll=latent_loss, total=total_loss)
+        if return_recons:
+            o_predictions = torch.stack(o_predictions, dim=1)
+        return losses, o_predictions
 
 
 if __name__ == "__main__":

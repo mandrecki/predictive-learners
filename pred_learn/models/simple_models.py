@@ -109,35 +109,39 @@ class ActionEncoder(nn.Module):
         return out
 
 
-class BeliefStatePropagator(nn.Module):
-    def __init__(self, v_size=V_SIZE, bs_size=BS_SIZE):
-        super(BeliefStatePropagator, self).__init__()
-        self.gru = nn.GRU(v_size, bs_size, num_layers=1, batch_first=True)
+class StatePropagator(nn.Module):
+    def __init__(self, in_size=V_SIZE, bs_size=BS_SIZE):
+        super(StatePropagator, self).__init__()
+        self.gru = nn.GRU(in_size, bs_size, num_layers=1, batch_first=True)
 
     def forward(self, x, h=None):
-        # if h is None:
-        #     out = self.gru(x)
-        # else:
-        #     out = self.gru(x, h)
-
         out, h = self.gru(x, h)
         return out, h
 
 
-class SimpleFF(nn.Module):
-    def __init__(self, v_size=V_SIZE):
-        super(SimpleFF, self).__init__()
+class ActionStatePropagator(StatePropagator):
+    def __init__(self, in_size, bs_size, a_size):
+        super(ActionStatePropagator, self).__init__(a_size+in_size, bs_size)
+
+    def forward(self, action, x, h=None):
+        x = torch.cat([action, x], dim=-1).unsqueeze(1)
+        out, h = self.gru(x, h)
+        return out, h
+
+
+class SigmoidFF(nn.Module):
+    def __init__(self, in_size, out_size):
+        super(SigmoidFF, self).__init__()
         self.fc_seq = nn.Sequential(
-            nn.Linear(v_size, v_size),
-            nn.ReLU(inplace=True),
-            nn.Linear(v_size, v_size),
-            nn.ReLU(inplace=True),
-            # nn.Sigmoid(),
+            nn.Linear(in_size, out_size),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
         out = self.fc_seq(x)
         return out
+
+
 
 
 class SimpleAE(nn.Module):
