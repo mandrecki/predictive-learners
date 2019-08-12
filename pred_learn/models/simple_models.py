@@ -142,6 +142,17 @@ class SigmoidFF(nn.Module):
         return out
 
 
+class LinearFF(nn.Module):
+    def __init__(self, in_size, out_size):
+        super(LinearFF, self).__init__()
+        self.fc_seq = nn.Sequential(
+            nn.Linear(in_size, out_size),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        out = self.fc_seq(x)
+        return out
 
 
 class SimpleAE(nn.Module):

@@ -369,29 +369,6 @@ class ControlSuiteEnv(AbstractEnv):
         return np.random.uniform(spec.minimum, spec.maximum, spec.shape)
 
 
-# TODO update below
-
-# Preprocesses an observation inplace (from float32 Tensor [0, 255] to [-0.5, 0.5])
-def preprocess_observation_(observation, bit_depth):
-    return observation // 2**(8-bit_depth) / 2**bit_depth
-    # observation.div_(2 ** (8 - bit_depth)).floor_().div_(2 ** bit_depth).sub_(
-    #     0.5)  # Quantise to given bit depth and centre
-    # observation.add_(torch.rand_like(observation).div_(
-    #     2 ** bit_depth))  # Dequantise (to approx. match likelihood of PDF of continuous images vs. PMF of discrete images)
-
-
-# Postprocess an observation for storage (from float32 numpy array [-0.5, 0.5] to uint8 numpy array [0, 255])
-def postprocess_observation(observation, bit_depth):
-    return np.clip(np.floor((observation + 0.5) * 2 ** bit_depth) * 2 ** (8 - bit_depth), 0, 2 ** 8 - 1).astype(
-        np.uint8)
-
-
-def _images_to_observation(images, bit_depth):
-    images = cv2.resize(images, (64, 64), interpolation=cv2.INTER_LINEAR)
-    images = preprocess_observation_(images, bit_depth)
-    return images
-
-
 # Wrapper for batching environments together
 class EnvBatcher():
     def __init__(self, env_class, env_args, env_kwargs, n):

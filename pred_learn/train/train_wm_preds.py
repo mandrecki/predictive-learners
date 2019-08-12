@@ -44,15 +44,15 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     workers = 4
 
-    dataset_train = ObservationSeriesDataset("../clean_records/{}/base-1.torch".format(env_id), action_space_n, args.series_length, args.bit_depth)
-    dataset_test = ObservationSeriesDataset("../clean_records/{}/base-2.torch".format(env_id), action_space_n, args.series_length, args.bit_depth)
+    dataset_train = ObservationSeriesDataset("../clean_records/{}/base-1.torch".format(env_id), action_space, args.series_length, args.bit_depth)
+    dataset_test = ObservationSeriesDataset("../clean_records/{}/base-2.torch".format(env_id), action_space, args.series_length, args.bit_depth)
     train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=workers)
     test_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=1)
     tmp_env.close()
     tmp_env = None
 
     channels_n = dataset_train.get_channels_n()
-    model = VAE_MDN(channels_n, action_space_n).to(device)
+    model = VAE_MDN(channels_n, action_space).to(device)
     try:
         if args.model_path is not None:
             model.load_state_dict(torch.load(args.model_path))

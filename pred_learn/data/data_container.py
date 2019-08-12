@@ -1,19 +1,20 @@
 import torch
-from torch import functional as F
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.sampler import Sampler
-from torchvision.transforms import Resize, ToTensor, ToPILImage, Grayscale, RandomGrayscale
-import os
 import numpy as np
-from collections import deque
-from skimage.transform import resize
+import gym
 
 
 class ObservationDataset(Dataset):
-    def __init__(self, filepath, action_space_n, bit_depth=8):
+    def __init__(self, filepath, action_space, bit_depth=8):
         super(ObservationDataset, self).__init__()
         self.record = torch.load(filepath)
-        self.action_space_n = action_space_n
+        self.action_space = action_space
+        if type(action_space) is gym.spaces.discrete.Discrete:
+            self.action_size = action_space.n
+        elif type(action_space) is gym.spaces.Box:
+            self.action_size = action_space.shape[0]
+        else:
+            raise ValueError("Bad action space type given to dataset: {}".format( type(action_space)))
 
         assert type(bit_depth) is int and 1 <= bit_depth <= 8
         self.bit_depth = bit_depth
@@ -25,18 +26,15 @@ class ObservationDataset(Dataset):
         # idx = np.random.randint(0, len(self))
 
         timestep = self.record[idx]
-        action = timestep["a0"]
-        if type(action) is int:
-            action = np.zeros(self.action_space_n)
-            action[timestep["a0"]] = 1
 
         s0 = self.preprocess_observation(timestep["s0"])
         s1 = self.preprocess_observation(timestep["s1"])
+        a0 = self.preprocess_action(timestep["a0"])
 
         sample = {
             "s0": torch.FloatTensor(s0).permute([2, 0, 1]),
             "s1": torch.FloatTensor(s1).permute([2, 0, 1]),
-            "a0": torch.LongTensor(action),
+            "a0": torch.Tensor(a0),
             "r1": torch.FloatTensor([timestep["r1"]]),
             "terminal": torch.ByteTensor([timestep["terminal"]]),
         }
@@ -53,10 +51,15 @@ class ObservationDataset(Dataset):
         # drop bits and to float
         return observation // 2 ** (8 - self.bit_depth) / 2 ** self.bit_depth
 
+    def preprocess_action(self, action):
+        if type(self.action_space) is gym.spaces.Discrete:
+            action = np.eye(self.action_size)[action]
+        return action
+
 
 class ObservationSeriesDataset(ObservationDataset):
-    def __init__(self, filepath, action_space_n, series_length, bit_depth=8):
-        super(ObservationSeriesDataset, self).__init__(filepath, action_space_n, bit_depth)
+    def __init__(self, filepath, action_space, series_length, bit_depth=8):
+        super(ObservationSeriesDataset, self).__init__(filepath, action_space, bit_depth)
         self.series_length = series_length
 
     def __len__(self):
@@ -76,16 +79,16 @@ class ObservationSeriesDataset(ObservationDataset):
             timestep = self.record[i]
             s0 = self.preprocess_observation(timestep["s0"])
             s1 = self.preprocess_observation(timestep["s1"])
+            a0 = self.preprocess_action(timestep["a0"])
 
-            sample["s0"].append(torch.FloatTensor(s0).permute([2, 0, 1]).unsqueeze(0))
-            sample["s1"].append(torch.FloatTensor(s1).permute([2, 0, 1]).unsqueeze(0))
-            sample["a0"].append(torch.Tensor([timestep["a0"]]).unsqueeze(0))
-            sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
-            # TODO remove item() below
-            sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]).unsqueeze(0))
+            sample["s0"].append(torch.FloatTensor(s0).permute([2, 0, 1]))
+            sample["s1"].append(torch.FloatTensor(s1).permute([2, 0, 1]))
+            sample["a0"].append(torch.Tensor(a0))
+            sample["r1"].append(torch.FloatTensor([timestep["r1"]]))
+            sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]))
 
         for key, value in sample.items():
-            sample[key] = torch.cat(value)
+            sample[key] = torch.stack(value)
 
         return sample
 

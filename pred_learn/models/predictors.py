@@ -40,10 +40,11 @@ Requirements:
 import torch
 from torch import nn
 import numpy as np
+import gym
 import torch.nn.functional as F
 
 from .losses import normal_KL_div, gaussian_mix_nll
-from .simple_models import StatePropagator, ActionStatePropagator, SigmoidFF
+from .simple_models import StatePropagator, ActionStatePropagator, SigmoidFF , LinearFF
 
 from .vae_wm import Encoder, Decoder, MixtureDensityNet
 
@@ -82,13 +83,18 @@ class VAE_MDN(nn.Module):
         self.transition_is_determininstic = False
 
         self.action_space = action_space
+        if type(action_space) is gym.spaces.discrete.Discrete:
+            self.action_size = action_space.n
+        elif type(action_space) is gym.spaces.Box:
+            self.action_size = action_space.shape[0]
+        else:
+            raise ValueError("Bad action space type given to model: {}".format(type(action_space)))
 
         self.initial_observations = 5
         self.update_probability = 1.0
         self.skip_null_action = False
 
         self.latent_size = latent_size
-        self.action_size = action_space
         self.image_channels = image_channels
         self.n_gaussians = n_gaussians
 
@@ -96,8 +102,8 @@ class VAE_MDN(nn.Module):
         # TODO convert action to dim=1 continuous
         # self.action_encoder = models.get("action_encoder", None)
         self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
-        self.reward_decoder = models.get("reward_decoder",  nn.Linear(latent_size, 1))
-        self.done_decoder = models.get("done_decoder",  SigmoidFF)
+        self.reward_decoder = models.get("reward_decoder",  LinearFF(latent_size, 1))
+        self.done_decoder = models.get("done_decoder",  SigmoidFF(latent_size, 1))
         # self.measurement_updater = models.get("measurement_updater", None)
         self.action_propagator = models.get("action_propagator", ActionStatePropagator(latent_size, latent_size, self.action_size))
         self.env_propagator = models.get("env_propagator", MixtureDensityNet(latent_size, latent_size, n_gaussians))
@@ -136,7 +142,7 @@ class VAE_MDN(nn.Module):
         for t in range(series_len):
             o_0 = o_series[:, t, ...]
             o_1 = o_next_series[:, t, ...]
-            a_0 = a_series[:, t, ...].squeeze()
+            a_0 = a_series[:, t, ...]
             done_1 = done_series[:, t, ...]
 
             with torch.no_grad():
