@@ -72,14 +72,16 @@ def series2wideim(series, return_numpy=False, skip_detail=True):
 
     return wide_im
 
-    # colour channel last
-    # x = series.cpu().numpy().transpose([0, 1, 3, 4, 2])
-    # n_splits = x.shape[-1]//3
-    # ims_y = []
-    # for i in range(x.shape[0]):
-    #     im_x = np.dstack(np.split(x[i, ...], n_splits, axis=-1))
-    #     im_x = np.dstack(np.split(im_x, im_x.shape[0], axis=0))
-    #     ims_y.append(im_x)
-    #
-    # im_display = np.hstack(ims_y).squeeze(0)
-    # return im_display
+
+def append_losses(new_losses, losses_record=None):
+    if losses_record is None:
+        losses_record = {key: [] for key in new_losses.keys()}
+    for key, value in new_losses.items():
+        losses_record[key].append(value.item())
+    return losses_record
+
+
+def losses2numpy(losses_record):
+    ars = [np.array(loss) for loss in losses_record.values()]
+    ar = np.stack(ars, axis=-1)
+    return ar

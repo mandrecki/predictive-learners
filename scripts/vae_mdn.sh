@@ -8,7 +8,7 @@
 #ENV_NAMES=( "Pong-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "PixelCopter-ple-v0" "Catcher-ple-v0" "Pong-ple-v0" ) # "TetrisA-v2" )
 
-ENV_NAMES=( "CarRacing-v0" "ball_in_cup-catch" "finger-spin" "cheetah-run" "Pong-ple-v0" "PixelCopter-ple-v0" "Catcher-ple-v0" ) # "TetrisA-v2" )
+ENV_NAMES=( "finger-spin"  "cheetah-run" "CarRacing-v0" "ball_in_cup-catch" "finger-spin" "Pong-ple-v0" "PixelCopter-ple-v0" "Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "Ant-v2" "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" "HalfCheetah-v2" )
 #ENV_NAMES=( "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" )
 #ENV_NAMES=( "CarRacing-v0" )

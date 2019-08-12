@@ -7,7 +7,7 @@ import visdom
 from pred_learn.models.predictors import VAE_MDN
 from pred_learn.models.vae_wm import VAE
 from pred_learn.data.data_container import ObservationSeriesDataset, ImageSeriesDataset, ObservationDataset
-from pred_learn.utils import stack2wideim, series2wideim
+from pred_learn.utils.visualize import stack2wideim, series2wideim, losses2numpy, append_losses
 from pred_learn.envs import make_env
 
 IGNORE_N_FIRST_IN_LOSS = 5
@@ -60,8 +60,8 @@ if __name__ == "__main__":
         print("Model not found")
 
     optimiser = torch.optim.Adam(model.parameters(), lr=0.001)
-    losses = []
-    test_losses = []
+    losses = None
+    test_losses = None
 
     if args.vis:
         vis = visdom.Visdom(env=env_id)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
             dones = batch["terminal"].to(device)
 
             loss, obs_pred = model.get_prediction_loss(obs_in, obs_target, actions, rewards, dones, return_recons=False)
-            losses.append(loss["total"].item())
+            losses = append_losses(loss, losses)
             loss["total"].backward()
             optimiser.step()
 
@@ -97,12 +97,15 @@ if __name__ == "__main__":
                     loss, obs_pred = model.get_prediction_loss(obs_in, obs_target, actions, rewards, dones,
                                                                return_recons=True)
                     freerun_pred = model.free_running_prediction(obs_in, actions, deterministic=True)
-                    test_losses.append(loss["total"].item())
-
+                    test_losses = append_losses(loss, test_losses)
 
                     if args.vis:
-                        window_test_loss = vis.line(test_losses, args.log_interval * np.arange(len(test_losses)), win=window_test_loss)
-                        window_loss = vis.line(losses, np.arange(len(losses)), win=window_loss)
+                        window_test_loss = vis.line(losses2numpy(test_losses), args.log_interval * np.arange(len(test_losses["total"])),
+                                                    win=window_test_loss,
+                                                    opts=dict(legend=list(test_losses.keys()), title="test loss"))
+                        window_loss = vis.line(losses2numpy(losses), np.arange(len(losses["total"])),
+                                               win=window_loss,
+                                               opts=dict(legend=list(losses.keys()), title="training loss"))
                         win_recon = vis.image(series2wideim(obs_pred), win=win_recon, opts=dict(caption="preds"))
                         win_target = vis.image(series2wideim(obs_target), win=win_target, opts=dict(caption="target"))
                         win_freerun = vis.image(series2wideim(freerun_pred), win=win_freerun, opts=dict(caption="freerun"))

@@ -126,7 +126,7 @@ class VAE_MDN(nn.Module):
         series_len = o_series.size(1)
 
         memory = None
-        memory = 0.5 * torch.ones(1, batch_size, 64).to(o_series.device)
+        # memory = 0.5 * torch.ones(1, batch_size, 64).to(o_series.device)
         o_enc_preds = []
         # o_recons = []
         o_predictions = []
