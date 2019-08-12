@@ -121,7 +121,51 @@ class VAE_MDN(nn.Module):
         total_loss = KLD + recon_loss
         return dict(reconstruction=recon_loss, variational=KLD, total=total_loss)
 
-    def get_latents_loss(self, o_series, o_next_series, a_series, return_recons=False):
+    def get_prediction_loss(self, o_series, o_next_series, a_series, reward_series, done_series, return_recons=False):
+        batch_size = o_series.size(0)
+        series_len = o_series.size(1)
+
+        memory = None
+        memory = 0.5 * torch.ones(1, batch_size, 64).to(o_series.device)
+        o_enc_preds = []
+        # o_recons = []
+        o_predictions = []
+        r_predictions = []
+        done_predictions = []
+        latent_loss = []
+        for t in range(series_len):
+            o_0 = o_series[:, t, ...]
+            o_1 = o_next_series[:, t, ...]
+            a_0 = a_series[:, t, ...].squeeze()
+            done_1 = done_series[:, t, ...]
+
+            with torch.no_grad():
+                o_0_enc, _, _ = self.image_encoder(o_0)
+                o_1_enc, _, _ = self.image_encoder(o_1)
+
+            belief, memory = self.action_propagator(a_0, o_0_enc, memory)
+            z_mu, z_sigma, z_logpi = self.env_propagator(belief)
+
+            memory[:, done_1.squeeze(), ...] = 0.0
+
+            # don't compute loss for initial obs (warm up period)
+            if t >= self.initial_observations:
+                latent_loss.append(gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi))
+
+            if return_recons:
+                with torch.no_grad():
+                    z_next = self.env_propagator.get_sample(z_logpi, z_mu, z_sigma)
+                    o_pred = self.image_decoder(z_next)
+                    o_predictions.append(o_pred)
+
+        latent_loss = torch.mean(torch.stack(latent_loss))
+        total_loss = latent_loss
+        losses = dict(latent_nll=latent_loss, total=total_loss)
+        if return_recons:
+            o_predictions = torch.stack(o_predictions, dim=1)
+        return losses, o_predictions
+
+    def free_running_prediction(self, o_series, a_series, deterministic=False):
         batch_size = o_series.size(0)
         series_len = o_series.size(1)
 
@@ -131,36 +175,26 @@ class VAE_MDN(nn.Module):
         o_predictions = []
         r_predictions = []
         done_predictions = []
-        latent_loss = None
-        for t in range(series_len):
-            o_0 = o_series[:, t, ...]
-            o_1 = o_next_series[:, t, ...]
-            a_0 = a_series[:, t, ...].squeeze()
+        latent_loss = []
+        with torch.no_grad():
+            for t in range(series_len):
+                o_0 = o_series[:, t, ...]
+                a_0 = a_series[:, t, ...].squeeze()
 
-            with torch.no_grad():
-                o_0_enc, _, _ = self.image_encoder(o_0)
-                o_1_enc, _, _ = self.image_encoder(o_1)
+                if t < self.initial_observations:
+                    o_0_enc, _, _ = self.image_encoder(o_0)
+                else:
+                    o_0_enc = z_next
 
-            belief, memory = self.action_propagator(a_0, o_0_enc, memory)
-            z_mu, z_sigma, z_logpi = self.env_propagator(belief)
+                belief, memory = self.action_propagator(a_0, o_0_enc, memory)
+                z_mu, z_sigma, z_logpi = self.env_propagator(belief)
 
-            if latent_loss is None:
-                latent_loss = gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi)
-            else:
-                latent_loss += gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi)
+                z_next = self.env_propagator.get_sample(z_logpi, z_mu, z_sigma, deterministic)
+                o_pred = self.image_decoder(z_next)
+                o_predictions.append(o_pred)
 
-            if return_recons:
-                with torch.no_grad():
-                    z_next = self.env_propagator.get_sample(z_logpi, z_mu, z_sigma)
-                    o_pred = self.image_decoder(z_next)
-                    o_predictions.append(o_pred)
-
-        latent_loss /= series_len
-        total_loss = latent_loss
-        losses = dict(latent_nll=latent_loss, total=total_loss)
-        if return_recons:
-            o_predictions = torch.stack(o_predictions, dim=1)
-        return losses, o_predictions
+        o_predictions = torch.stack(o_predictions, dim=1)
+        return o_predictions
 
 
 if __name__ == "__main__":

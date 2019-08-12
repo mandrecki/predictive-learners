@@ -118,14 +118,18 @@ class MixtureDensityNet(nn.Module):
 
         return mu, sigma, logpi
 
-    def get_sample(self, logpi, mu, sigma):
+    def get_sample(self, logpi, mu, sigma, deterministic=False):
         with torch.no_grad():
             batch_size = logpi.size(0)
-            pi_dist = Categorical(probs=logpi.exp())
-            draw = pi_dist.sample()
-            mu_drawn = mu[torch.arange(batch_size), draw, ...]
-            sigma_drawn = sigma[torch.arange(batch_size), draw, ...]
-            eps = torch.randn_like(sigma_drawn)
-            z = eps.mul(sigma_drawn).add_(mu_drawn)
+            if deterministic:
+                draw = logpi.argmax(dim=-1)
+                z = mu[torch.arange(batch_size), draw, ...]
+            else:
+                pi_dist = Categorical(probs=logpi.exp())
+                draw = pi_dist.sample()
+                mu_drawn = mu[torch.arange(batch_size), draw, ...]
+                sigma_drawn = sigma[torch.arange(batch_size), draw, ...]
+                eps = torch.randn_like(sigma_drawn)
+                z = eps.mul(sigma_drawn).add_(mu_drawn)
             return z
 

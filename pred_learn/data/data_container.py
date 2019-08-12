@@ -10,10 +10,13 @@ from skimage.transform import resize
 
 
 class ObservationDataset(Dataset):
-    def __init__(self, filepath, action_space_n):
+    def __init__(self, filepath, action_space_n, bit_depth=8):
         super(ObservationDataset, self).__init__()
         self.record = torch.load(filepath)
         self.action_space_n = action_space_n
+
+        assert type(bit_depth) is int and 1 <= bit_depth <= 8
+        self.bit_depth = bit_depth
 
     def __len__(self):
         return len(self.record)
@@ -27,9 +30,12 @@ class ObservationDataset(Dataset):
             action = np.zeros(self.action_space_n)
             action[timestep["a0"]] = 1
 
+        s0 = self.preprocess_observation(timestep["s0"])
+        s1 = self.preprocess_observation(timestep["s1"])
+
         sample = {
-            "s0": torch.FloatTensor(timestep["s0"]).permute([2, 0, 1]),
-            "s1": torch.FloatTensor(timestep["s1"]).permute([2, 0, 1]),
+            "s0": torch.FloatTensor(s0).permute([2, 0, 1]),
+            "s1": torch.FloatTensor(s1).permute([2, 0, 1]),
             "a0": torch.LongTensor(action),
             "r1": torch.FloatTensor([timestep["r1"]]),
             "terminal": torch.ByteTensor([timestep["terminal"]]),
@@ -43,22 +49,15 @@ class ObservationDataset(Dataset):
     def get_channels_n(self):
         return self.record[0]["s0"].shape[-1]
 
+    def preprocess_observation(self, observation):
+        # drop bits and to float
+        return observation // 2 ** (8 - self.bit_depth) / 2 ** self.bit_depth
+
 
 class ObservationSeriesDataset(ObservationDataset):
-    def __init__(self, filepath, action_space_n, series_length, subtract_average=False):
-        super(ObservationSeriesDataset, self).__init__(filepath, action_space_n)
+    def __init__(self, filepath, action_space_n, series_length, bit_depth=8):
+        super(ObservationSeriesDataset, self).__init__(filepath, action_space_n, bit_depth)
         self.series_length = series_length
-
-        self.subtract_average = subtract_average
-        self.average_im = None
-        if self.subtract_average:
-            self.calculate_average_image()
-
-    def calculate_average_image(self):
-        sum_im = np.zeros((64, 64, 3))
-        for timestep in self.record:
-            sum_im += timestep["s0"]
-        self.average_im = sum_im/len(self.record)
 
     def __len__(self):
         return len(self.record)
@@ -75,14 +74,11 @@ class ObservationSeriesDataset(ObservationDataset):
         }
         for i in range(idx, idx+self.series_length):
             timestep = self.record[i]
-            s0 = timestep["s0"]
-            s1 = timestep["s1"]
-            if self.subtract_average:
-                s0 -= self.average_im
-                s1 -= self.average_im
+            s0 = self.preprocess_observation(timestep["s0"])
+            s1 = self.preprocess_observation(timestep["s1"])
 
-            sample["s0"].append(torch.LongTensor(s0).permute([2, 0, 1]).unsqueeze(0))
-            sample["s1"].append(torch.LongTensor(s1).permute([2, 0, 1]).unsqueeze(0))
+            sample["s0"].append(torch.FloatTensor(s0).permute([2, 0, 1]).unsqueeze(0))
+            sample["s1"].append(torch.FloatTensor(s1).permute([2, 0, 1]).unsqueeze(0))
             sample["a0"].append(torch.Tensor([timestep["a0"]]).unsqueeze(0))
             sample["r1"].append(torch.FloatTensor([timestep["r1"]]).unsqueeze(0))
             # TODO remove item() below

@@ -17,6 +17,9 @@ if __name__ == "__main__":
     parser.add_argument('--env-id', default='Pong-ple-v0',
                         help='env to record (see list in env_configs.py')
     parser.add_argument('--batch-size', type=int, default=8)
+    parser.add_argument('--n-epochs', type=int, default=10)
+    parser.add_argument('--bit-depth', type=int, default=8)
+    parser.add_argument('--series-length', type=int, default=50)
 
     parser.add_argument('--file-appendix', default="0", type=str)
     parser.add_argument('--model-path', default=None, help='model to load if exists, then save to this location')
@@ -25,6 +28,8 @@ if __name__ == "__main__":
     parser.add_argument('--video-path', default="../clean_records/test_vid.torch", help='path to ordered images')
     parser.add_argument('--vis', action='store_true', default=False,
                         help='enable visdom visualization')
+    parser.add_argument('--log-interval', type=int, default=100,
+                        help='log interval, one log per n updates (default: 100)')
 
     args = parser.parse_args()
     print("args given:", args)
@@ -39,9 +44,8 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     workers = 4
 
-    # dataset_train = ObservationSeriesDataset("../clean_records/{}/video-1.torch".format(env_id), action_space_n, series_len)
-    dataset_train = ObservationSeriesDataset("../clean_records/{}/base-1.torch".format(env_id), action_space_n, series_len)
-    dataset_test = ObservationSeriesDataset("../clean_records/{}/base-2.torch".format(env_id), action_space_n, series_len)
+    dataset_train = ObservationSeriesDataset("../clean_records/{}/base-1.torch".format(env_id), action_space_n, args.series_length, args.bit_depth)
+    dataset_test = ObservationSeriesDataset("../clean_records/{}/base-2.torch".format(env_id), action_space_n, args.series_length, args.bit_depth)
     train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=workers)
     test_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=1)
     tmp_env.close()
@@ -60,24 +64,23 @@ if __name__ == "__main__":
     test_losses = []
 
     if args.vis:
-        vis = visdom.Visdom()
+        vis = visdom.Visdom(env=env_id)
         win_target = None
         win_recon = None
+        win_freerun = None
         window_loss = None
         window_test_loss = None
 
-    for i_epoch in range(1):
+    for i_epoch in range(args.n_epochs):
         for i_batch, batch in enumerate(train_loader):
             model.zero_grad()
             obs_in = batch["s0"].to(device)
-            actions = batch["a0"].to(device)
             obs_target = batch["s1"].to(device)
+            actions = batch["a0"].to(device)
+            rewards = batch["r1"].to(device)
+            dones = batch["terminal"].to(device)
 
-            #         preprocess obs
-            obs_in = obs_in.float() / 255
-            obs_target = obs_target.float() / 255
-    #
-            loss, obs_pred = model.get_latents_loss(obs_in, obs_target, actions, return_recons=False)
+            loss, obs_pred = model.get_prediction_loss(obs_in, obs_target, actions, rewards, dones, return_recons=False)
             losses.append(loss["total"].item())
             loss["total"].backward()
             optimiser.step()
@@ -88,15 +91,21 @@ if __name__ == "__main__":
                     obs_in = batch["s0"].to(device)
                     actions = batch["a0"].to(device)
                     obs_target = batch["s1"].to(device)
-                    obs_in = obs_in.float() / 255
-                    obs_target = obs_target.float() / 255
-                    loss, obs_pred = model.get_latents_loss(obs_in, obs_target, actions, return_recons=True)
+                    rewards = batch["r1"].to(device)
+                    dones = batch["terminal"].to(device)
+
+                    loss, obs_pred = model.get_prediction_loss(obs_in, obs_target, actions, rewards, dones,
+                                                               return_recons=True)
+                    freerun_pred = model.free_running_prediction(obs_in, actions, deterministic=True)
                     test_losses.append(loss["total"].item())
+
+
                     if args.vis:
-                        window_test_loss = vis.line(test_losses, win=window_test_loss)
-                        window_loss = vis.line(losses, win=window_loss)
-                        win_recon = vis.image(series2wideim(obs_pred), win=win_recon)
-                        win_target = vis.image(series2wideim(obs_target), win=win_target)
+                        window_test_loss = vis.line(test_losses, args.log_interval * np.arange(len(test_losses)), win=window_test_loss)
+                        window_loss = vis.line(losses, np.arange(len(losses)), win=window_loss)
+                        win_recon = vis.image(series2wideim(obs_pred), win=win_recon, opts=dict(caption="preds"))
+                        win_target = vis.image(series2wideim(obs_target), win=win_target, opts=dict(caption="target"))
+                        win_freerun = vis.image(series2wideim(freerun_pred), win=win_freerun, opts=dict(caption="freerun"))
 
         if i_epoch % 1 == 0:
             torch.save(model.state_dict(), args.model_path)
