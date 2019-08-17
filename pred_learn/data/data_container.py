@@ -54,6 +54,8 @@ class ObservationDataset(Dataset):
     def preprocess_action(self, action):
         if type(self.action_space) is gym.spaces.Discrete:
             action = np.eye(self.action_size)[action]
+            action = action.squeeze()
+            assert len(action.shape) == 1
         return action
 
 
@@ -84,7 +86,7 @@ class ObservationSeriesDataset(ObservationDataset):
             sample["s0"].append(torch.FloatTensor(s0).permute([2, 0, 1]))
             sample["s1"].append(torch.FloatTensor(s1).permute([2, 0, 1]))
             sample["a0"].append(torch.Tensor(a0))
-            sample["r1"].append(torch.FloatTensor([timestep["r1"]]))
+            sample["r1"].append(torch.FloatTensor(timestep["r1"]))
             sample["terminal"].append(torch.ByteTensor([timestep["terminal"]]))
 
         for key, value in sample.items():

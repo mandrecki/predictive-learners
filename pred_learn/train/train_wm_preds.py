@@ -44,8 +44,16 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     workers = 4
 
-    dataset_train = ObservationSeriesDataset("../clean_records/{}/base-1.torch".format(env_id), action_space, args.series_length, args.bit_depth)
-    dataset_test = ObservationSeriesDataset("../clean_records/{}/base-2.torch".format(env_id), action_space, args.series_length, args.bit_depth)
+    assert not (args.extra_video and args.extra_image)
+    if args.extra_video:
+        detail_str = "video"
+    elif args.extra_image:
+        detail_str = "image"
+    else:
+        detail_str = "base"
+
+    dataset_train = ObservationSeriesDataset("../clean_records/{}/{}-1.torch".format(env_id, detail_str), action_space, args.series_length, args.bit_depth)
+    dataset_test = ObservationSeriesDataset("../clean_records/{}/{}-2.torch".format(env_id, detail_str), action_space, args.series_length, args.bit_depth)
     train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=workers)
     test_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=1)
     tmp_env.close()
@@ -59,7 +67,8 @@ if __name__ == "__main__":
     except FileNotFoundError:
         print("Model not found")
 
-    optimiser = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimiser = torch.optim.Adam(model.parameters(), lr=0.005)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, factor=0.4, patience=3, verbose=True)
     losses = None
     test_losses = None
 
@@ -110,5 +119,7 @@ if __name__ == "__main__":
                         win_target = vis.image(series2wideim(obs_target), win=win_target, opts=dict(caption="target"))
                         win_freerun = vis.image(series2wideim(freerun_pred), win=win_freerun, opts=dict(caption="freerun"))
 
+        recent_tests_loss = np.mean(test_losses["total"][-10:])
+        scheduler.step(recent_tests_loss)
         if i_epoch % 1 == 0:
             torch.save(model.state_dict(), args.model_path)

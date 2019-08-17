@@ -66,7 +66,9 @@ if __name__ == "__main__":
     except FileNotFoundError:
         print("Model not found")
 
-    optimiser = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimiser = torch.optim.Adam(model.parameters(), lr=0.005)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, factor=0.4, patience=3, verbose=True)
+
     losses = None
     test_losses = None
 
@@ -113,5 +115,7 @@ if __name__ == "__main__":
                         win_recon = vis.image(series2wideim(obs_recon), win=win_recon, opts=dict(caption="preds"))
                         win_target = vis.image(series2wideim(obs_in), win=win_target, opts=dict(caption="target"))
 
+        recent_tests_loss = np.mean(test_losses["total"][-20:])
+        scheduler.step(recent_tests_loss)
         if i_epoch % 1 == 0:
             torch.save(model.state_dict(), args.model_path)

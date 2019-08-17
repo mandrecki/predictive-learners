@@ -8,7 +8,7 @@
 #ENV_NAMES=( "Pong-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "PixelCopter-ple-v0" "Catcher-ple-v0" "Pong-ple-v0" ) # "TetrisA-v2" )
 
-ENV_NAMES=( "CarRacing-v0" "cartpole-balance" "Pong-ple-v0" "TetrisA-v2" "PixelCopter-ple-v0" "finger-spin"  "cheetah-run" "ball_in_cup-catch" "Catcher-ple-v0" )
+ENV_NAMES=(  "CarRacing-v0" "cartpole-balance"  "PixelCopter-ple-v0" "Pong-ple-v0" "TetrisA-v2" "finger-spin"  "cheetah-run" "ball_in_cup-catch" "Catcher-ple-v0" )
 #ENV_NAMES=( "Ant-v2" "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" "HalfCheetah-v2" )
 #ENV_NAMES=( "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" )
 #ENV_NAMES=( "CarRacing-v0" )
@@ -37,8 +37,8 @@ do
     for j in `seq 1 $RUNS`
     do
         echo "Running "${ENV_NAMES[i]}
-        python ../pred_learn/train/train_wm_vae.py --env-id "${ENV_NAMES[i]}" --model-path $EXP_FOLDER/trained_models/predictive/"${ENV_NAMES[i]}"-1.pt --vis --n-epochs 30 --bit-depth $BIT_DEPTH
-        python ../pred_learn/train/train_wm_preds.py --env-id "${ENV_NAMES[i]}" --model-path $EXP_FOLDER/trained_models/predictive/"${ENV_NAMES[i]}"-1.pt --vis --n-epochs 30 --bit-depth $BIT_DEPTH
+        python ../pred_learn/train/train_wm_vae.py --env-id "${ENV_NAMES[i]}" --model-path $EXP_FOLDER/trained_models/predictive/"${ENV_NAMES[i]}"-1.pt --vis --n-epochs 30 --bit-depth $BIT_DEPTH --extra-images
+        python ../pred_learn/train/train_wm_preds.py --env-id "${ENV_NAMES[i]}" --model-path $EXP_FOLDER/trained_models/predictive/"${ENV_NAMES[i]}"-1.pt --vis --n-epochs 30 --bit-depth $BIT_DEPTH --extra-images
 
     done
 done

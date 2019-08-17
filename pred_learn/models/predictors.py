@@ -138,25 +138,34 @@ class VAE_MDN(nn.Module):
         o_predictions = []
         r_predictions = []
         done_predictions = []
-        latent_loss = []
+        losses = {key: [] for key in ["latent", "reward", "done"]}
         for t in range(series_len):
-            o_0 = o_series[:, t, ...]
-            o_1 = o_next_series[:, t, ...]
-            a_0 = a_series[:, t, ...]
-            done_1 = done_series[:, t, ...]
+            o0 = o_series[:, t, ...]
+            o1 = o_next_series[:, t, ...]
+            a0 = a_series[:, t, ...]
+            r1 = reward_series[:, t, ...]
+            done1 = done_series[:, t, ...]
 
             with torch.no_grad():
-                o_0_enc, _, _ = self.image_encoder(o_0)
-                o_1_enc, _, _ = self.image_encoder(o_1)
+                o0_enc, _, _ = self.image_encoder(o0)
+                o1_enc, _, _ = self.image_encoder(o1)
 
-            belief, memory = self.action_propagator(a_0, o_0_enc, memory)
+            # print(a_series.size())
+            # print(a0.size())
+            # print(o0_enc.size())
+            belief, memory = self.action_propagator(a0, o0_enc, memory)
             z_mu, z_sigma, z_logpi = self.env_propagator(belief)
+            rew_pred = self.reward_decoder(belief)
+            done_pred = self.done_decoder(belief)
 
-            memory[:, done_1.squeeze(), ...] = 0.0
+            memory[:, done1.squeeze(), ...] = 0.0
 
             # don't compute loss for initial obs (warm up period)
             if t >= self.initial_observations:
-                latent_loss.append(gaussian_mix_nll(o_1_enc, z_mu, z_sigma, z_logpi))
+                losses["latent"].append(gaussian_mix_nll(o1_enc, z_mu, z_sigma, z_logpi))
+                losses["reward"].append(F.mse_loss(rew_pred, r1))
+                losses["done"].append(F.binary_cross_entropy(done_pred, done1.float()))
+                # print(done_pred)
 
             if return_recons:
                 with torch.no_grad():
@@ -164,9 +173,9 @@ class VAE_MDN(nn.Module):
                     o_pred = self.image_decoder(z_next)
                     o_predictions.append(o_pred)
 
-        latent_loss = torch.mean(torch.stack(latent_loss))
-        total_loss = latent_loss
-        losses = dict(latent_nll=latent_loss, total=total_loss)
+        for key, value in losses.items():
+            losses[key] = torch.mean(torch.stack(value))
+        losses["total"] = sum(list(losses.values()))
         if return_recons:
             o_predictions = torch.stack(o_predictions, dim=1)
         return losses, o_predictions

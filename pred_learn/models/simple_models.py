@@ -124,9 +124,10 @@ class ActionStatePropagator(StatePropagator):
         super(ActionStatePropagator, self).__init__(a_size+in_size, bs_size)
 
     def forward(self, action, x, h=None):
+        """Single step forward"""
         x = torch.cat([action, x], dim=-1).unsqueeze(1)
         out, h = self.gru(x, h)
-        return out, h
+        return out.squeeze(1), h
 
 
 class SigmoidFF(nn.Module):
