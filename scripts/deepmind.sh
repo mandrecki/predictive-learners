@@ -19,7 +19,7 @@ ENV_NAMES=( "cheetah-run" "cartpole-balance" "reacher-easy" "ball_in_cup-catch" 
 #ENV_NAMES=( "CarRacing-v0" )
 
 #ENV_STEPS=( 1000000 1000000 1000000 1000000 1000000 1000000 )
-ENV_STEPS=1000000
+ENV_STEPS=10000000
 
 RUNS=3
 

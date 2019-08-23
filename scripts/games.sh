@@ -15,13 +15,14 @@ SEED_OFFSET=0
 #ENV_NAMES=( "PixelCopter-ple-v0"  "MountainCar-v0"  )
 #ENV_NAMES=( "WaterWorld-ple-v0" )
 #ENV_NAMES=( "CartPole-v0" )
-ENV_NAMES=( "TetrisA-v2" )
+#ENV_NAMES=( "TetrisA-v2" )
+ENV_NAMES=( "Sokoban-v0" )
 #ENV_NAMES=( "CarRacing-v0" )
 
 ENV_STEPS=1000000
 RUNS=1
 
-EXP_NAME="tetris-rnn1frame-video"
+EXP_NAME="sokoban-rnn1frame-video"
 rm -r ../exp/$EXP_NAME/
 mkdir ../exp/$EXP_NAME/
 echo "Effect of random video detail on RL with 1 frame, RNN " > ../exp/$EXP_NAME/info.txt

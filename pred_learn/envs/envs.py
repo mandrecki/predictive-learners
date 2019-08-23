@@ -37,14 +37,17 @@ from baselines import bench
 
 
 import gym
-import gym_tetris
 import gym_sokoban
+import gym_minigrid
+from gym_minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
+import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 import gym_ple
 
 
-from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecConcatVideo
+from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch,\
+    VecPyTorchFrameStack, VecConcatVideo, AbsoluteActionGrid, TinySokoban
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -85,6 +88,11 @@ GYM_ENVS = [ "CartPole-v0",
     "HumanoidStandup-v2", "InvertedDoublePendulum-v2", "InvertedPendulum-v2", "Reacher-v2", "Swimmer-v2",
     "Walker2d-v2"]
 
+ABSTRACT_ENVS = [
+    "MiniGrid-Empty-6x6-v0",
+    "MiniGrid-Empty-16x16-v0",
+]
+
 GYM_ENVS_ACTION_REPEATS = {
     "CarRacing-v0": 6,
 }
@@ -94,6 +102,11 @@ CONTROL_SUITE_ENVS = ["cartpole-balance", "cartpole-swingup", "reacher-easy", "f
 CONTROL_SUITE_ACTION_REPEATS = {"cartpole": 8, "reacher": 4, "finger": 2, "cheetah": 4, "ball_in_cup": 6, "walker": 2}
 
 ALL_ENVS = GAME_ENVS + GYM_ENVS + CONTROL_SUITE_ENVS
+ANTIALIASED_ENVS = [
+    # "Sokoban-v0",
+    "MiniGrid-Empty-6x6-v0",
+    "MiniGrid-Empty-16x16-v0",
+]
 
 CROP_ENVS = {
     "TetrisA-v2": (45, 211, 93, 178),  # only blocks visible
@@ -118,6 +131,8 @@ CURRENT_ENVS = [
 def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=True, target_size=(PRED_SIZE, PRED_SIZE)):
     if env_id in GAME_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
+    elif env_id in ABSTRACT_ENVS:
+        env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in GYM_ENVS:
         env = GymEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in CONTROL_SUITE_ENVS:
@@ -129,7 +144,7 @@ def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=True,
     if env_id in CROP_ENVS.keys():
         env._env = CropImage(env._env, CROP_ENVS.get(env_id))
     if env.observation_size[0:2] != target_size:
-        env._env = ResizeImage(env._env, target_size)
+        env._env = ResizeImage(env._env, target_size, antialias=(env_id in ANTIALIASED_ENVS))
 
     # if extra_detail:
     #     env._env = ConcatNoise(env._env)
@@ -177,6 +192,7 @@ class AbstractEnv:
     metadata = {"render.modes": []}
     reward_range = (-float("inf"), float("inf"))
     spec = None
+
     def __init__(self):
         self.ep_reward = 0
         pass
@@ -212,10 +228,14 @@ class GameEnv(AbstractEnv):
         extra_args = ENV_GAMES_ARGS.get(env_id, {})
         self.env_id = env_id
         if env_id == "TetrisA-v2":
-            # TODO resize and crop observation
             self._env = JoypadSpace(gym_tetris.make(env_id, **extra_args), SIMPLE_MOVEMENT)
         elif "ple" in env_id:
             self._env = gym_ple.make(env_id, **extra_args)
+        elif env_id in ABSTRACT_ENVS:
+            # self._env = AbsoluteActionGrid(FullyObsWrapper(gym.make(env_id)))
+            self._env = AbsoluteActionGrid(RGBImgObsWrapper(gym.make(env_id)))
+        elif "Sokoban" in env_id:
+            self._env = TinySokoban(gym.make(env_id, **extra_args))
         else:
             self._env = gym.make(env_id, **extra_args)
 

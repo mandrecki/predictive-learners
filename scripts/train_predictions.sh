@@ -3,8 +3,8 @@
 #SEED_OFFSET=200
 
 #ENV_NAMES=(  "ball_in_cup-catch" "finger-spin" "cheetah-run" "cartpole-balance" )
-ENV_NAMES=(  "reacher-easy"  "cheetah-run"  "cartpole-balance" "ball_in_cup-catch" "finger-spin" )
-#ENV_NAMES=( "PixelCopter-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
+#ENV_NAMES=(  "reacher-easy"  "cheetah-run"  "cartpole-balance" "ball_in_cup-catch" "finger-spin" )
+ENV_NAMES=( "PixelCopter-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "Pong-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "PixelCopter-ple-v0" "Catcher-ple-v0" "Pong-ple-v0" ) # "TetrisA-v2" )
 

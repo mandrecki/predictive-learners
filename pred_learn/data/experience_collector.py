@@ -1,7 +1,7 @@
-# import gym_ple
-# import gym
-# import gym_tetris
-# import ple
+import gym_ple
+import gym
+import gym_tetris
+import ple
 
 import torch
 import numpy as np
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     else:
         plt.figure(1)
         mng = plt.get_current_fig_manager()
-        mng.resize(*mng.window.maxsize())
+        # mng.resize(*mng.window.maxsize())
 
     while len(record) < args.total_steps:
         obs = envs.reset()
@@ -100,19 +100,19 @@ if __name__ == "__main__":
                         plt.clf()
                         im_display = stack2wideim(obs)
                         plt.imshow(im_display)
-                        envs.render()
                         plt.pause(0.05)
 
             else:
-                action = envs.sample_random_action()
+                # action = envs.sample_random_action()
+                action = torch.randint(0, 3, (args.n_envs,))
 
             # set action to null action
             if np.random.rand() < P_NO_ACTION:
                 action[:] = 0
 
-            # if args.render:
-            #     env.render()
-            #     plt.pause(0.02)
+            if args.render:
+                envs.render()
+                plt.pause(0.02)
 
             timestep["a0"] = action[0, ...].cpu().numpy()
             obs, rew, done, info = envs.step(action)

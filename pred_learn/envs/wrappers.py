@@ -2,8 +2,39 @@ import numpy as np
 import gym
 import cv2
 import torch
+from enum import IntEnum
 
 from baselines.common.vec_env import VecEnvWrapper, VecEnvObservationWrapper
+from gym_minigrid.minigrid import MiniGridEnv
+
+
+class AbsoluteActionGrid(gym.ActionWrapper):
+    class Actions(IntEnum):
+        # Turn left, turn right, move forward
+        right = 0
+        down = 1
+        left = 2
+        up = 3
+        # Done completing task
+        done = 4
+
+    def __init__(self, env):
+        super(AbsoluteActionGrid, self).__init__(env)
+        self.actions = AbsoluteActionGrid.Actions
+
+        # Actions are discrete integer values
+        self.action_space = gym.spaces.Discrete(len(self.actions))
+
+    def action(self, action):
+        if action < 4:
+            # set agent's direction
+            self.unwrapped.agent_dir = action
+            action = MiniGridEnv.Actions.forward
+        elif action == self.actions.done:
+            action = MiniGridEnv.Actions.done
+        else:
+            raise ValueError("Bad action: {}".format(action))
+        return action
 
 
 # Standardising environments
@@ -19,6 +50,22 @@ class ToImageObservation(gym.ObservationWrapper):
     def observation(self, symbolic_observation):
         image = self.render(mode='rgb_array')
         return image
+
+
+class TinySokoban(gym.ObservationWrapper):
+    def __init__(self, env):
+        super(TinySokoban, self).__init__(env)
+        image_size = (0, 0)
+        channels = 3
+        self.observation_space = gym.spaces.Box(0, 255,
+                                                [*image_size, channels],
+                                                dtype=np.uint8)
+
+    def observation(self, symbolic_observation):
+        image = self.render(mode='tiny_rgb_array')
+        return image
+
+
 
 
 class CropImage(gym.ObservationWrapper):
@@ -37,18 +84,35 @@ class CropImage(gym.ObservationWrapper):
 
 
 class ResizeImage(gym.ObservationWrapper):
-    def __init__(self, env, new_size):
+    def __init__(self, env, new_size, antialias=False):
         super(ResizeImage, self).__init__(env)
         self.new_size = new_size
+        self.antialias = antialias
         channels = 3
         self.observation_space = gym.spaces.Box(0, 255,
                                                 [*self.new_size, channels],
                                                 dtype=np.uint8)
 
+    def add_padding(self, image):
+        paddings = []
+        for old_size in image.shape[0:2]:
+            full_padding = 2 ** np.ceil(np.log2(old_size)) - old_size
+            start_padding = int(np.floor(full_padding/2))
+            end_padding = int(np.ceil(full_padding/2))
+            paddings.append(start_padding)
+            paddings.append(end_padding)
+
+        if any(paddings):
+            image = cv2.copyMakeBorder(image, *paddings, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        return image
+
     def observation(self, image):
-        # interpolation = cv2.INTER_LINEAR
-        interpolation = cv2.INTER_AREA
-        image = cv2.resize(image, self.new_size, interpolation=interpolation)
+        # only add padding if starting with small image
+        if self.antialias and image.shape[0] != self.new_size[0]:
+            image = self.add_padding(image)
+            image = cv2.resize(image, self.new_size, interpolation=cv2.INTER_NEAREST)
+        else:
+            image = cv2.resize(image, self.new_size, interpolation=cv2.INTER_AREA)
         return image
 
 
