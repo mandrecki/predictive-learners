@@ -73,7 +73,6 @@ class Predictor(nn.Module):
         self.action_propagator = models.get("action_propagator", None)
         self.env_propagator = models.get("env_propagator", None)
 
-
 class VAE_MDN(nn.Module):
     def __init__(self, image_channels, action_space, latent_size=64, n_gaussians=5, models={}):
         super(VAE_MDN, self).__init__()
@@ -113,7 +112,7 @@ class VAE_MDN(nn.Module):
         recon_x = self.image_decoder(z)
         return recon_x, mu, logsigma
 
-    def get_vae_loss(self, recon_obs, obs_in, mu, logsigma):
+    def get_vae_loss(self, recon_obs, obs_in, mu, logsigma, free_nats=None):
         # TODO use averages or full?
         # reconstruction:
         # squared error loss per pixel per channel
@@ -124,6 +123,10 @@ class VAE_MDN(nn.Module):
 
         # variational loss per dimension of latent code
         KLD = normal_KL_div(mu, logsigma)
+        if free_nats is not None:
+            free_nats = torch.full((1,), free_nats).to(recon_obs.device)
+            KLD = torch.max(KLD, free_nats)
+
         total_loss = KLD + recon_loss
         return dict(reconstruction=recon_loss, variational=KLD, total=total_loss)
 
@@ -132,12 +135,7 @@ class VAE_MDN(nn.Module):
         series_len = o_series.size(1)
 
         memory = None
-        # memory = 0.5 * torch.ones(1, batch_size, 64).to(o_series.device)
-        o_enc_preds = []
-        # o_recons = []
         o_predictions = []
-        r_predictions = []
-        done_predictions = []
         losses = {key: [] for key in ["latent", "reward", "done"]}
         for t in range(series_len):
             o0 = o_series[:, t, ...]
@@ -150,9 +148,6 @@ class VAE_MDN(nn.Module):
                 o0_enc, _, _ = self.image_encoder(o0)
                 o1_enc, _, _ = self.image_encoder(o1)
 
-            # print(a_series.size())
-            # print(a0.size())
-            # print(o0_enc.size())
             belief, memory = self.action_propagator(a0, o0_enc, memory)
             z_mu, z_sigma, z_logpi = self.env_propagator(belief)
             rew_pred = self.reward_decoder(belief)
@@ -165,7 +160,6 @@ class VAE_MDN(nn.Module):
                 losses["latent"].append(gaussian_mix_nll(o1_enc, z_mu, z_sigma, z_logpi))
                 losses["reward"].append(F.mse_loss(rew_pred, r1))
                 losses["done"].append(F.binary_cross_entropy(done_pred, done1.float()))
-                # print(done_pred)
 
             if return_recons:
                 with torch.no_grad():
@@ -185,12 +179,7 @@ class VAE_MDN(nn.Module):
         series_len = o_series.size(1)
 
         memory = None
-        o_enc_preds = []
-        # o_recons = []
         o_predictions = []
-        r_predictions = []
-        done_predictions = []
-        latent_loss = []
         with torch.no_grad():
             for t in range(series_len):
                 o_0 = o_series[:, t, ...]
@@ -210,6 +199,52 @@ class VAE_MDN(nn.Module):
 
         o_predictions = torch.stack(o_predictions, dim=1)
         return o_predictions
+
+
+class PredictorVAE(Predictor):
+    def __init__(self, image_channels, action_space, latent_size, **models):
+        super(PredictorVAE, self).__init__()
+        self.encoding_is_deterministic = True
+        self.decoding_is_deterministic = True
+        self.transition_is_determininstic = False
+        self.state_is_spatial = False
+
+        self.action_space = action_space
+        self.latent_size = latent_size
+
+        self.initial_observations = 3
+        self.measurement_update_probability = 1
+        self.skip_null_action = False
+
+        self.image_encoder = models.get("image_encoder", Encoder(image_channels, latent_size, deterministic=self.encoding_is_deterministic))
+        # TODO convert action to dim=1 continuous
+        # self.action_encoder = models.get("action_encoder", None)
+        self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
+        self.reward_decoder = models.get("reward_decoder",  LinearFF(latent_size, 1))
+        self.done_decoder = models.get("done_decoder",  SigmoidFF(latent_size, 1))
+        self.measurement_updater = models.get("measurement_updater", nn.GRUCell(latent_size, 2*latent_size))
+        self.action_propagator = models.get("action_propagator", ActionStatePropagator(latent_size, latent_size, self.action_size))
+        # self.env_propagator = models.get("env_propagator", MixtureDensityNet(latent_size, latent_size, n_gaussians))
+
+    def get_series_prediction(self, o_series, o_next_series, a_series, reward_series, done_series, return_recons=False):
+        preds = {key: [] for key in ["recon", "belief", "reward", "done"]}
+        losses = {key: [] for key in ["recon", "variational_encoding","variational_transition", "reward", "done"]}
+        batch_size = o_series.size(0)
+        series_len = o_series.size(1)
+        memory = None
+        for t in range(series_len):
+            o_0 = o_series[:, t, ...]
+            o_1 = o_next_series[:, t, ...]
+            a_0 = a_series[:, t, ...]
+
+            z, mu, logsigma = self.image_encoder(o_0)
+            losses["variational_encoding"].append(normal_KL_div(mu, logsigma))
+
+
+
+            # update_probability = self.update_probability if t > 3 else 1
+
+
 
 
 if __name__ == "__main__":

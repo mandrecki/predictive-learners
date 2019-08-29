@@ -110,9 +110,9 @@ if __name__ == "__main__":
             if np.random.rand() < P_NO_ACTION:
                 action[:] = 0
 
-            if args.render:
-                envs.render()
-                plt.pause(0.02)
+            # if args.render:
+            #     envs.render()
+            #     plt.pause(0.02)
 
             timestep["a0"] = action[0, ...].cpu().numpy()
             obs, rew, done, info = envs.step(action)

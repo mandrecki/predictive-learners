@@ -33,6 +33,7 @@ import cv2
 import numpy as np
 from baselines.common.vec_env import DummyVecEnv, VecEnvWrapper, SubprocVecEnv
 from baselines import bench
+import random
 
 
 
@@ -40,6 +41,8 @@ import gym
 import gym_sokoban
 import gym_minigrid
 from gym_minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
+import gym_maze
+import mazenv
 import gym_tetris
 from gym_tetris.actions import SIMPLE_MOVEMENT
 from nes_py.wrappers import JoypadSpace
@@ -47,7 +50,7 @@ import gym_ple
 
 
 from .wrappers import ToImageObservation, CropImage, ResizeImage, UnSuite, TransposeImage, VecPyTorch,\
-    VecPyTorchFrameStack, VecConcatVideo, AbsoluteActionGrid, TinySokoban
+    VecPyTorchFrameStack, VecConcatVideo, AbsoluteActionGrid, TinySokoban, MazeEnvImage
 
 GAME_ENVS = [
     "CarRacing-v0",
@@ -60,6 +63,14 @@ GAME_ENVS = [
     "Catcher-ple-v0",
     "Pong-ple-v0",
     "Sokoban-v0",
+]
+
+ATARI_ENVS = [
+    "Alien-v0",
+    "Freeway-v0",
+    "MsPacman-v0",
+    "SpaceInvaders-v0",
+    "Centipede-v0",
 ]
 
 GAME_ENVS_ACTION_REPEATS = {
@@ -91,6 +102,8 @@ GYM_ENVS = [ "CartPole-v0",
 ABSTRACT_ENVS = [
     "MiniGrid-Empty-6x6-v0",
     "MiniGrid-Empty-16x16-v0",
+    "maze-random-10x10-v0",
+    "MazeEnv-v0"
 ]
 
 GYM_ENVS_ACTION_REPEATS = {
@@ -99,7 +112,7 @@ GYM_ENVS_ACTION_REPEATS = {
 
 CONTROL_SUITE_ENVS = ["cartpole-balance", "cartpole-swingup", "reacher-easy", "finger-spin", "cheetah-run",
                       "ball_in_cup-catch", "walker-walk"]
-CONTROL_SUITE_ACTION_REPEATS = {"cartpole": 8, "reacher": 4, "finger": 2, "cheetah": 4, "ball_in_cup": 6, "walker": 2}
+CONTROL_SUITE_ACTION_REPEATS = {"cartpole": 8, "reacher": 4, "finger": 2, "cheetah": 4, "ball_in_cup": 2, "walker": 2}
 
 ALL_ENVS = GAME_ENVS + GYM_ENVS + CONTROL_SUITE_ENVS
 ANTIALIASED_ENVS = [
@@ -129,10 +142,14 @@ CURRENT_ENVS = [
 
 
 def make_env(env_id, seed=0, max_episode_length=9999999, pytorch_dim_order=True, target_size=(PRED_SIZE, PRED_SIZE)):
-    if env_id in GAME_ENVS:
+    if env_id in GAME_ENVS or env_id in ATARI_ENVS:
         env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
-    elif env_id in ABSTRACT_ENVS:
-        env = GameEnv(env_id, seed, max_episode_length=max_episode_length)
+    elif "MiniGrid" in env_id:
+        env = GameEnv(env_id, seed, max_episode_length=1000)
+    elif "MazeEnv" in env_id:
+        env = GameEnv(env_id, seed, max_episode_length=1000)
+    elif "maze-random" in env_id:
+        env = GymEnv(env_id, seed, max_episode_length=1000)
     elif env_id in GYM_ENVS:
         env = GymEnv(env_id, seed, max_episode_length=max_episode_length)
     elif env_id in CONTROL_SUITE_ENVS:
@@ -231,11 +248,13 @@ class GameEnv(AbstractEnv):
             self._env = JoypadSpace(gym_tetris.make(env_id, **extra_args), SIMPLE_MOVEMENT)
         elif "ple" in env_id:
             self._env = gym_ple.make(env_id, **extra_args)
-        elif env_id in ABSTRACT_ENVS:
+        elif "MiniGrid" in env_id:
             # self._env = AbsoluteActionGrid(FullyObsWrapper(gym.make(env_id)))
             self._env = AbsoluteActionGrid(RGBImgObsWrapper(gym.make(env_id)))
         elif "Sokoban" in env_id:
             self._env = TinySokoban(gym.make(env_id, **extra_args))
+        elif "MazeEnv" in env_id:
+            self._env = MazeEnvImage(mazenv.Env(mazenv.prim((8, 8))), randomize=True)
         else:
             self._env = gym.make(env_id, **extra_args)
 

@@ -19,6 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--n-epochs', type=int, default=10)
     parser.add_argument('--bit-depth', type=int, default=8)
+    parser.add_argument('--grad-clip-norm', type=float, default=1000, help='Gradient clipping norm')
 
     parser.add_argument('--file-appendix', default="0", type=str)
     parser.add_argument('--model-path', default=None, help='model to load if exists, then save to this location')
@@ -88,10 +89,11 @@ if __name__ == "__main__":
 
             obs_recon, mu, logsigma = model.reconstruct_unordered(obs_in)
 
-            loss = model.get_vae_loss(obs_recon, obs_in, mu, logsigma)
+            loss = model.get_vae_loss(obs_recon, obs_in, mu, logsigma, free_nats=100)
             losses = append_losses(loss, losses)
 
             loss["total"].backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip_norm, norm_type=2)
             optimiser.step()
 
             if i_batch % args.log_interval == 0:

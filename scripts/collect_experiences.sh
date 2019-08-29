@@ -10,13 +10,17 @@
 #ENV_NAMES=( "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" )
 #ENV_NAMES=( "CarRacing-v0" )
 #ENV_NAMES=( "TetrisA-v2" )
-ENV_NAMES=( "Sokoban-v0" )
+#ENV_NAMES=( "Sokoban-v0" )
+#ENV_NAMES=( "SpaceInvaders-v0" "MsPacman-v0" "Freeway-v0" "Alien-v0"  )
+#ENV_NAMES=( "maze-random-10x10-v0" )
+ENV_NAMES=( "MazeEnv-v0" )
+
 #ENV_NAMES=( "MiniGrid-Empty-16x16-v0" )
 #ENV_NAMES=( "cheetah-run" ) # "cartpole-balance" "reacher-easy" "ball_in_cup-catch" "finger-spin"  )
 #ENV_NAMES=( "finger-spin"  )
 
 #EXP_NAME="classic-cp-rnn-1"
-EXP_NAME="sokoban-rnn1frame-video"
+EXP_NAME="MazeEnv-rnn1frame-video"
 #EXP_NAME="pixelcopter-detail"
 #EXP_NAME="deepmind-rnn1frame-video"
 
@@ -33,10 +37,8 @@ do
     do
         echo "Running "${ENV_NAMES[i]}
 #        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "image-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --recurrent-policy # --render
-        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "base-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/base/ppo/"${ENV_NAMES[i]}"-1.pt --recurrent-policy # --render
-        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "video-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --extra-video --recurrent-policy --render
-        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "image-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --extra-image --recurrent-policy #--render
-#        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-number $j --total-steps 1000 --rl-model-path ../trained_models/ppo/"${ENV_NAMES[i]}"-1-detail.pt --render --extra-video
+        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "base-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/base/ppo/"${ENV_NAMES[i]}"-1.pt --recurrent-policy --render
+#        python ../pred_learn/data/experience_collector.py --env-id "${ENV_NAMES[i]}" --file-appendix "video-$j" --total-steps $STEPS --rl-model-path $EXP_FOLDER/trained_models/test/ppo/"${ENV_NAMES[i]}"-1.pt --extra-video --recurrent-policy --render
 
     done
 done

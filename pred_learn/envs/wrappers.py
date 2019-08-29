@@ -3,9 +3,50 @@ import gym
 import cv2
 import torch
 from enum import IntEnum
+import random
 
 from baselines.common.vec_env import VecEnvWrapper, VecEnvObservationWrapper
 from gym_minigrid.minigrid import MiniGridEnv
+import mazenv
+
+
+class MazeEnvImage(gym.ObservationWrapper):
+    FIXED_SEED = 1337
+
+    def __init__(self, env, randomize):
+        super(MazeEnvImage, self).__init__(env)
+        self.randomize = randomize
+        self.maze_size = self.env.maze.shape
+        channels = 3
+        self.observation_space = gym.spaces.Box(0, 255,
+                                                [*self.maze_size, channels],
+                                                dtype=np.uint8)
+        if not randomize:
+            random.seed(self.FIXED_SEED)
+            self.env = mazenv.Env(mazenv.prim(self.maze_size))
+
+    def seed(self, seed=None):
+        if self.randomize:
+            random.seed(seed)
+            self.env = mazenv.Env(mazenv.prim(self.maze_size))
+
+    def reset(self):
+        if self.randomize:
+            self.env = mazenv.Env(mazenv.prim(self.maze_size))
+        obs = self.env.reset()
+        return self.observation(obs)
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        reward = reward / np.prod(self.maze_size)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, obs):
+        board = np.zeros(self.observation_space.shape, dtype=np.uint8)
+        board[..., 0] = 255 * obs[..., mazenv.env.WALL_CELL_FIELD]
+        board[..., 1] = 255 * obs[..., mazenv.env.END_CELL_FIELD]
+        board[..., 2] = 255 * obs[..., mazenv.env.CURRENT_CELL_FIELD]
+        return board
 
 
 class AbsoluteActionGrid(gym.ActionWrapper):
