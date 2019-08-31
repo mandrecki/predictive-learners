@@ -13,6 +13,8 @@ class ObservationDataset(Dataset):
             self.action_size = action_space.n
         elif type(action_space) is gym.spaces.Box:
             self.action_size = action_space.shape[0]
+        elif type(action_space) is int:
+            self.action_size = action_space
         else:
             raise ValueError("Bad action space type given to dataset: {}".format( type(action_space)))
 

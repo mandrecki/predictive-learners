@@ -5,13 +5,14 @@
 #ENV_NAMES=(  "ball_in_cup-catch" "finger-spin" "cheetah-run" "cartpole-balance" )
 #ENV_NAMES=(  "reacher-easy"  "cheetah-run"  "cartpole-balance" "ball_in_cup-catch" "finger-spin" )
 #ENV_NAMES=( "PixelCopter-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
-ENV_NAMES=( "Pong-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
+#ENV_NAMES=( "Pong-ple-v0" ) #"Catcher-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "PixelCopter-ple-v0" "Catcher-ple-v0" "Pong-ple-v0" ) # "TetrisA-v2" )
 #ENV_NAMES=( "MiniGrid-Empty-16x16-v0" )
 #ENV_NAMES=(  "CarRacing-v0" "cartpole-balance"  "PixelCopter-ple-v0" "Pong-ple-v0" "TetrisA-v2" "finger-spin"  "cheetah-run" "ball_in_cup-catch" "Catcher-ple-v0" )
 #ENV_NAMES=( "Ant-v2" "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" "HalfCheetah-v2" )
 #ENV_NAMES=( "CartPole-v0" "Pendulum-v0" "HalfCheetah-v2" )
 #ENV_NAMES=( "CarRacing-v0" )
+ENV_NAMES=( "MazeEnv-v0" )
 
 #EXP_NAME="classic-cp-rnn-1"
 #EXP_NAME="car-rnn-1"
