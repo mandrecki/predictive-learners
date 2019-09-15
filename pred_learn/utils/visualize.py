@@ -47,7 +47,7 @@ def stack2wideim(tensor):
     return im_display
 
 
-def series2wideim(series, return_numpy=False, skip_detail=True):
+def series2wideim(series, return_numpy=False, skip_detail=True, clip=True):
     """Converts a series or batch of series of images to viewable image.
 
     :param series: batch_size, series_len (optional), channels, h, w
@@ -66,6 +66,9 @@ def series2wideim(series, return_numpy=False, skip_detail=True):
             wide_im = wide_im[:3, ...]
         else:
             wide_im = torch.cat(torch.split(wide_im, 3, dim=-3), dim=-1)
+
+    if clip:
+        wide_im = torch.clamp(wide_im, 0, 1)
 
     if return_numpy:
         wide_im = wide_im.detach().cpu().numpy().transpose([1, 2, 0])

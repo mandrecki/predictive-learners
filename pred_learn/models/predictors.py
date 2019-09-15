@@ -39,14 +39,19 @@ Requirements:
 
 import torch
 from torch import nn
+from torch.distributions import Normal
+from torch.distributions.kl import kl_divergence
+import torch.nn.functional as F
+
+
 import numpy as np
 import gym
-import torch.nn.functional as F
 
 from .losses import normal_KL_div, gaussian_mix_nll
 from .simple_models import StatePropagator, ActionStatePropagator, SigmoidFF , LinearFF
 
 from .vae_wm import Encoder, Decoder, MixtureDensityNet
+
 
 
 class Predictor(nn.Module):
@@ -201,48 +206,129 @@ class VAE_MDN(nn.Module):
         return o_predictions
 
 
-class PredictorVAE(Predictor):
-    def __init__(self, image_channels, action_space, latent_size, **models):
-        super(PredictorVAE, self).__init__()
-        self.encoding_is_deterministic = True
-        self.decoding_is_deterministic = True
-        self.transition_is_determininstic = False
-        self.state_is_spatial = False
+class PlaNetPredictor(Predictor):
+    def __init__(self,  image_channels, action_space,
+                 belief_size=200, state_size=30, hidden_size=200, embedding_size=1024,
+                 activation_function='relu', min_std_dev=0.1):
+        super(Predictor, self).__init__()
+        models = {}
 
+        self.image_channels = image_channels
         self.action_space = action_space
-        self.latent_size = latent_size
+        self.belief_size = belief_size
+        self.state_size = state_size
+        self.hidden_size = hidden_size
+        self.embedding_size = embedding_size
 
-        self.initial_observations = 3
-        self.measurement_update_probability = 1
-        self.skip_null_action = False
+        if type(action_space) is gym.spaces.discrete.Discrete:
+            self.action_size = action_space.n
+        elif type(action_space) is gym.spaces.Box:
+            self.action_size = action_space.shape[0]
+        else:
+            raise ValueError("Bad action space type given to model: {}".format(type(action_space)))
 
-        self.image_encoder = models.get("image_encoder", Encoder(image_channels, latent_size, deterministic=self.encoding_is_deterministic))
-        # TODO convert action to dim=1 continuous
-        # self.action_encoder = models.get("action_encoder", None)
-        self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
-        self.reward_decoder = models.get("reward_decoder",  LinearFF(latent_size, 1))
-        self.done_decoder = models.get("done_decoder",  SigmoidFF(latent_size, 1))
-        self.measurement_updater = models.get("measurement_updater", nn.GRUCell(latent_size, 2*latent_size))
-        self.action_propagator = models.get("action_propagator", ActionStatePropagator(latent_size, latent_size, self.action_size))
-        # self.env_propagator = models.get("env_propagator", MixtureDensityNet(latent_size, latent_size, n_gaussians))
+        from .planet_model import VisualObservationModel, VisualEncoder, TransitionModel, RewardModel, bottle
+        self.bottle = bottle
 
-    def get_series_prediction(self, o_series, o_next_series, a_series, reward_series, done_series, return_recons=False):
-        preds = {key: [] for key in ["recon", "belief", "reward", "done"]}
-        losses = {key: [] for key in ["recon", "variational_encoding","variational_transition", "reward", "done"]}
-        batch_size = o_series.size(0)
-        series_len = o_series.size(1)
+        self.image_encoder = models.get("image_encoder", VisualEncoder(image_channels, embedding_size))
+        self.image_decoder = models.get("image_decoder", VisualObservationModel(image_channels, belief_size, state_size, embedding_size))
+        self.reward_decoder = models.get("reward_decoder", RewardModel(belief_size, state_size, hidden_size))
+        self.transition_model = models.get("transition_model", TransitionModel(belief_size, state_size, self.action_size, hidden_size, embedding_size))
+
+    def get_prediction_loss(self, o_series, o_next_series, a_series, reward_series, done_series, return_recons=False, free_nats=0):
+        batch_size = o_series.size(1)
+        series_len = o_series.size(0)
+        device = o_series.device
+        free_nats = torch.full((1,), free_nats, device=device)
+
+
+        # losses = {key: [] for key in ["recon", "variational_encoding", "variational_transition", "reward", "done"]}
+        # preds = {key: [] for key in ["recon", "belief", "reward", "done"]}
+
+        nonterminals = (1 - done_series).float()
+        # Create initial belief and state for time t = 0
+        init_belief, init_state = torch.zeros(batch_size, self.belief_size, device=device), torch.zeros(batch_size, self.state_size, device=device)
+        # Update belief/state using posterior from previous belief/state, previous action and current observation (over entire sequence at once)
+        beliefs, prior_states, prior_means, prior_std_devs, posterior_states, posterior_means, posterior_std_devs = self.transition_model(init_state, a_series[:-1], init_belief, self.bottle(self.image_encoder, (o_series[1:], )), nonterminals)
+        # Calculate observation likelihood, reward likelihood and KL losses (for t = 0 only for latent overshooting); sum over final dims, average over batch and time (original implementation, though paper seems to miss 1/T scaling?)
+        o_recons = self.bottle(self.image_decoder, (beliefs, posterior_states))
+        recon_loss = F.mse_loss(o_recons, o_series[:-1], reduction='none').sum(dim=(2, 3, 4)).mean(dim=(0, 1))
+        reward_pred = self.bottle(self.reward_decoder, (beliefs, posterior_states))
+        reward_loss = F.mse_loss(reward_pred, reward_series[:-1].squeeze(), reduction='none').mean(dim=(0, 1))
+        kl_loss = torch.max(kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means, prior_std_devs)).sum(dim=2), free_nats).mean(dim=(0, 1))  # Note that normalisation by overshooting distance and weighting by overshooting distance cancel out
+
+        total_loss = recon_loss + reward_loss + kl_loss
+        losses = dict(total=total_loss, recon=recon_loss, variational=kl_loss, reward=reward_loss)
+        preds = dict(recon=o_recons)
+        return losses, preds
+
+    def free_running_prediction(self, o_series, a_series, deterministic=False):
+        batch_size = o_series.size(1)
+        series_len = o_series.size(0)
+
         memory = None
-        for t in range(series_len):
-            o_0 = o_series[:, t, ...]
-            o_1 = o_next_series[:, t, ...]
-            a_0 = a_series[:, t, ...]
+        o_predictions = []
+        with torch.no_grad():
+            for t in range(series_len):
+                o_0 = o_series[:, t, ...]
+                a_0 = a_series[:, t, ...].squeeze()
 
-            z, mu, logsigma = self.image_encoder(o_0)
-            losses["variational_encoding"].append(normal_KL_div(mu, logsigma))
+                if t < self.initial_observations:
+                    o_0_enc, _, _ = self.image_encoder(o_0)
+                else:
+                    o_0_enc = z_next
+
+                belief, memory = self.action_propagator(a_0, o_0_enc, memory)
+                z_mu, z_sigma, z_logpi = self.env_propagator(belief)
+
+                z_next = self.env_propagator.get_sample(z_logpi, z_mu, z_sigma, deterministic)
+                o_pred = self.image_decoder(z_next)
+                o_predictions.append(o_pred)
+
+        o_predictions = torch.stack(o_predictions, dim=1)
+        return o_predictions
 
 
 
-            # update_probability = self.update_probability if t > 3 else 1
+# class PlaNetPredictor(Predictor):
+#     def __init__(self, image_channels, action_space, latent_size, **models):
+#         super(PlaNetPredictor, self).__init__()
+#         self.encoding_is_deterministic = True
+#         self.decoding_is_deterministic = True
+#         self.transition_is_determininstic = False
+#         self.state_is_spatial = False
+#
+#         self.action_space = action_space
+#         self.latent_size = latent_size
+#
+#         self.initial_observations = 3
+#         self.measurement_update_probability = 1
+#         self.skip_null_action = False
+#
+#         self.image_encoder = models.get("image_encoder", Encoder(image_channels, latent_size, deterministic=self.encoding_is_deterministic))
+#         # TODO convert action to dim=1 continuous
+#         # self.action_encoder = models.get("action_encoder", None)
+#         self.image_decoder = models.get("image_decoder", Decoder(image_channels, latent_size))
+#         self.reward_decoder = models.get("reward_decoder",  LinearFF(latent_size, 1))
+#         self.done_decoder = models.get("done_decoder",  SigmoidFF(latent_size, 1))
+#         self.measurement_updater = models.get("measurement_updater", nn.GRUCell(latent_size, 2*latent_size))
+#         self.action_propagator = models.get("action_propagator", ActionStatePropagator(latent_size, latent_size, self.action_size))
+#         # self.env_propagator = models.get("env_propagator", MixtureDensityNet(latent_size, latent_size, n_gaussians))
+#
+#     def get_series_prediction(self, o_series, o_next_series, a_series, reward_series, done_series,
+#                               return_recons=False, overshooting=False):
+#         preds = {key: [] for key in ["recon", "belief", "reward", "done"]}
+#         losses = {key: [] for key in ["recon", "variational_encoding","variational_transition", "reward", "done"]}
+#         batch_size = o_series.size(0)
+#         series_len = o_series.size(1)
+#         memory = None
+#         for t in range(series_len):
+#             o_0 = o_series[:, t, ...]
+#             o_1 = o_next_series[:, t, ...]
+#             a_0 = a_series[:, t, ...]
+#
+#             _, z_mu, _ = self.image_encoder(o_0)
+
 
 
 

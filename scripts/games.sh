@@ -17,13 +17,14 @@ SEED_OFFSET=0
 #ENV_NAMES=( "CartPole-v0" )
 #ENV_NAMES=( "TetrisA-v2" )
 #ENV_NAMES=( "Sokoban-v0" )
-ENV_NAMES=(  "Alien-v0" "SpaceInvaders-v0" "MsPacman-v0" "Freeway-v0" )
+#ENV_NAMES=(  "Alien-v0" "SpaceInvaders-v0" "MsPacman-v0" "Freeway-v0" )
+ENV_NAMES=( "Snake-ple-v0" )
 #ENV_NAMES=( "CarRacing-v0" )
 
 ENV_STEPS=1000000
 RUNS=1
 
-EXP_NAME="atari-rnn1frame-video"
+EXP_NAME="snake-rnn1frame"
 rm -r ../exp/$EXP_NAME/
 mkdir ../exp/$EXP_NAME/
 echo "Effect of random video detail on RL with 1 frame, RNN " > ../exp/$EXP_NAME/info.txt
